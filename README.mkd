@@ -1,0 +1,32 @@
+# Summary
+
+Guarana is a gnutella2 web cache built upon appengine, also the name of a energetic and tasteful amazon fruit and one of the most brazilian famous soda. 
+
+# Support
+
+Send me a message on github <leite>, I'll support as soon as possible and when it is possible.
+
+# License
+
+BEER-WARE, see source file
+
+# Prerequisites
+
++ Java JDK 6.1
++ AppEngine Java SDK - http://code.google.com/appengine/downloads.html#Google_App_Engine_SDK_for_Java
+
+# Run
+
++ first make sure that you have installed Java and configured the appengine sdk in your path;
++ then clone the lastest: ```bash git clone    guarana```
++ go to folder 'war' inside 'guarana' folder and do the command: ```bash dev_appserver . ```
++ look at command to see if something gone wrong, if fine you can see it working by open a browser at http://localhost:8080/
+	
+# Deploy to Appengine
+
+
+# Test
+
+There's a file 'time_bench.lua' that have a benchmark using a bitwise library ( http://bitop.luajit.org/ ) ...
+
+% February 23th, 2012 -03 GMT
