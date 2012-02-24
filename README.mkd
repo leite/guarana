@@ -1,6 +1,6 @@
 # Summary
 
-Guarana is a gnutella2 web cache built upon appengine, also the name of a energetic and tasteful amazon fruit and one of the most brazilian famous soda. 
+Guarana is a gnutella2 web cache built upon appengine, also the name of an energetic and tasteful amazon fruit and one of the most famous brazilian's soda. 
 
 # Support
 
@@ -20,7 +20,7 @@ BEER-WARE, see source file
 + first make sure that you have installed Java and configured the appengine sdk in your path;
 + then clone the lastest: ```git clone https://leite@github.com/leite/guarana.git guarana```
 + go to folder 'war' inside 'guarana' folder and do the command: ```dev_appserver . ```
-+ look at command to see if something gone wrong, if fine you can see it working by open a browser at http://localhost:8080/
++ look at command to see if something went wrong, if everything is fine then you can see it working by open a browser at http://localhost:8080/
 	
 # Deploy to Appengine
 
