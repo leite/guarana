@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appengine-web-app xmlns="http://appengine.google.com/ns/1.0">
+	
+	<application>02guarana</application>
+	<version>2</version>
+
+	<!-- use threads, take care of your code. Use async operations! -->
+	<threadsafe>true</threadsafe>
+
+	<!-- Configure java.util.logging -->
+	<system-properties>
+		<property name="java.util.logging.config.file" value="WEB-INF/logging.properties"/>
+	</system-properties>
+	
+	<!-- if you want to use sessions: http://code.google.com/appengine/docs/java/config/appconfig.html#Enabling_Sessions -->
+
+</appengine-web-app>

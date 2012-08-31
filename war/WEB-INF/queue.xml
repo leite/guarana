@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- http://code.google.com/appengine/docs/java/config/queue.html -->
+<queue-entries>
+	<queue>
+		<name>update</name>
+		<mode>pull</mode>
+	</queue>
+</queue-entries>
