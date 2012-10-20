@@ -25,6 +25,7 @@ import com.esotericsoftware.kryo.serializers.CollectionSerializer;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.io.Output;
 
+import com.google.appengine.api.datastore.Blob;
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.DatastoreServiceFactory;
 import com.google.appengine.api.datastore.Entity;
@@ -50,11 +51,16 @@ public class UpdateProcessor extends HttpServlet  {
   
   public final void doGet(HttpServletRequest rq, HttpServletResponse rs) {
     
-    Queue queue = null;
+    Queue queue            = null;
     List<TaskHandle> tasks = null;
-    int hosts_processed = 0;
-    int urls_processed = 0;
-    String payload = null;
+    int hosts_processed    = 0;
+    int urls_processed     = 0;
+    boolean found          = false; 
+    String payload         = null;
+    String slicedPayload[] = {};
+    
+    Host stuntHost         = null;
+    Cache stuntCache       = null;
     
     try {
     
@@ -66,9 +72,14 @@ public class UpdateProcessor extends HttpServlet  {
       // --------------------------------------------------------------------------------------------------------
       // url|http://cache.leite.us/|GUAR|0.3|RAZA|2.5.5.3|10|123232323|40|80|false|true
       
+      int i = 0;
+      
       ds = DatastoreServiceFactory.getDatastoreService();
       
       queue = QueueFactory.getQueue("update");
+      
+      loadLastItem("Host");
+      loadLastItem("Cache");
       
       while(!((tasks = queue.leaseTasks(30, TimeUnit.SECONDS, 5)).isEmpty())){
         
@@ -76,12 +87,73 @@ public class UpdateProcessor extends HttpServlet  {
           
           payload = new String(leasedTask.getPayload());
           
+          slicedPayload = payload.toString().split("|");
+          
           if(payload.indexOf("host|")==0) {
             
+            // lookup
+            for(i=0; i<hosts.hosts.size(); ++i) {
+              if(hosts.hosts.get(i).ip == Long.parseLong(slicedPayload[2])) {
+                hosts.hosts.get(i).timeStamp = Long.parseLong(slicedPayload[1]);
+                hosts.hosts.get(i).port      = Long.parseLong(slicedPayload[3]);
+                hosts.hosts.get(i).uptime    = Long.parseLong(slicedPayload[6]);
+                hosts.hosts.get(i).curLeaves = Long.parseLong(slicedPayload[7]);
+                hosts.hosts.get(i).maxLeaves = Long.parseLong(slicedPayload[8]);
+                found = true;
+                break;
+              }
+            }
+            
+            // if not found create 
+            if(!found) {
+             stuntHost = new Host();
+             stuntHost.timeStamp = Long.parseLong(slicedPayload[1]);
+             stuntHost.ip            = Long.parseLong(slicedPayload[2]);
+             stuntHost.port          = Long.parseLong(slicedPayload[3]);
+             stuntHost.clientNick    = slicedPayload[4];
+             stuntHost.clientVersion = slicedPayload[5];
+             stuntHost.uptime        = Long.parseLong(slicedPayload[6]);
+             stuntHost.curLeaves     = Long.parseLong(slicedPayload[7]);
+             stuntHost.maxLeaves     = Long.parseLong(slicedPayload[8]);
+             hosts.hosts.add(stuntHost);
+            }
           } else {
             
+            // lookup
+            for(i=0; i<caches.caches.size(); ++i) {
+              if(caches.caches.get(i).url == slicedPayload[1]) {
+                caches.caches.get(i).cacheVersion  = slicedPayload[2];
+                caches.caches.get(i).cacheVersion  = slicedPayload[3];
+                caches.caches.get(i).clientNick    = slicedPayload[4];
+                caches.caches.get(i).clientVersion = slicedPayload[5];
+                caches.caches.get(i).rank          = Integer.parseInt(slicedPayload[6]);
+                caches.caches.get(i).timeStamp     = Long.parseLong(slicedPayload[7]);
+                caches.caches.get(i).urlCount      = Integer.parseInt(slicedPayload[8]);
+                caches.caches.get(i).ipCount       = Integer.parseInt(slicedPayload[9]);
+                caches.caches.get(i).g1            = Boolean.parseBoolean(slicedPayload[10]);
+                caches.caches.get(i).g2            = Boolean.parseBoolean(slicedPayload[11]);
+                found = true;
+                break;
+              }
+            }
+
+            //
+            if(!found) {
+              stuntCache = new Cache();
+              stuntCache.url           = slicedPayload[1];
+              stuntCache.cacheVersion  = slicedPayload[2];
+              stuntCache.cacheVersion  = slicedPayload[3];
+              stuntCache.clientNick    = slicedPayload[4];
+              stuntCache.clientVersion = slicedPayload[5];
+              stuntCache.rank          = Integer.parseInt(slicedPayload[6]);
+              stuntCache.timeStamp     = Long.parseLong(slicedPayload[7]);
+              stuntCache.urlCount      = Integer.parseInt(slicedPayload[8]);
+              stuntCache.ipCount       = Integer.parseInt(slicedPayload[9]);
+              stuntCache.g1            = Boolean.parseBoolean(slicedPayload[10]);
+              stuntCache.g2            = Boolean.parseBoolean(slicedPayload[11]);
+              caches.caches.add(stuntCache);
+            }
           }
-          
           queue.deleteTask(leasedTask.getName());
         }
       }
@@ -156,13 +228,12 @@ public class UpdateProcessor extends HttpServlet  {
   
   
   // 
-  private void loadLastItem( String model ) {
+  private void loadLastItem(String model) {
     Query query        = null;
     List<Entity> entities  = null;
     PreparedQuery prepared = null;
     Kryo kryo         = null;
     Input input         = null;
-    //byte[] buffer          = new byte[BUFFER_SIZE];
     try {
       query = new Query(model);
       query.addSort("timeStamp", SortDirection.DESCENDING);
@@ -196,6 +267,46 @@ public class UpdateProcessor extends HttpServlet  {
       input    = null;
     }
   }
+  
+  private void loadLastCache() {
+      DatastoreService ds   = null;
+      Query q               = null;
+      Input input        = null;
+      Kryo kryo             = null;
+      try {
+        ds = DatastoreServiceFactory.getDatastoreService();
+        q = new Query("Coche");
+        q.addSort("timeStamp", SortDirection.DESCENDING);
+        PreparedQuery pq = ds.prepare(q);
+        List<Entity> entities = pq.asList(FetchOptions.Builder.withLimit(1));
+        // 
+        System.out.println(entities.size());
+        if(entities.size()>0) {
+          kryo  = new Kryo();
+          input = new Input(1024 * 1024);
+          Blob blob = (Blob) entities.get(0).getProperty("value");
+          input.setBuffer(blob.getBytes());
+          kryo.register(Cache.class);
+          kryo.register(List.class);
+          kryo.register(CacheList.class);
+          
+          CacheList cacheList = new CacheList();
+          Cache _cache = new Cache();
+          
+          cacheList = kryo.readObject(input, CacheList.class);
+          _cache = cacheList.caches.get(0);
+          System.out.println(_cache.cacheName);
+        }
+      } catch(Exception ex) {
+        ex.printStackTrace();
+      } finally {
+        ds    = null;
+        q     = null;
+        input = null;
+        kryo  = null;
+      }
+    }
+    
   
   // get ip of host
   private long getIpOfUrl( String url ) {
