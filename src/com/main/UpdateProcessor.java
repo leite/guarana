@@ -11,9 +11,12 @@
 
 package com.main;
 
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -37,11 +40,16 @@ import com.google.appengine.api.taskqueue.Queue;
 import com.google.appengine.api.taskqueue.QueueFactory;
 import com.google.appengine.api.taskqueue.TaskHandle;
 
+@SuppressWarnings("serial")
 public class UpdateProcessor extends HttpServlet  {
   
-  private CacheList caches;
-  private HostList hosts;
+  //private CacheList caches;
+  //private HostList hosts;
+  private DataHolder data;
   DatastoreService ds;
+  long hostMaxTime;
+  long cacheMaxTime;
+  long time;
   
   public UpdateProcessor() {
     
@@ -49,19 +57,34 @@ public class UpdateProcessor extends HttpServlet  {
     
   }
   
+  public void init(ServletConfig config) throws ServletException { 
+    time = Math.round((new Date()).getTime() / 1000); 
+    hostMaxTime  = (time - Long.parseLong(getServletConfig().getInitParameter("hostExpirationTime")));
+    cacheMaxTime = (time - Long.parseLong(getServletConfig().getInitParameter("urlExpirationTime")));
+    super.init(config);
+  }
+
   public final void doGet(HttpServletRequest rq, HttpServletResponse rs) {
     
     Queue queue            = null;
     List<TaskHandle> tasks = null;
-    int hosts_processed    = 0;
-    int urls_processed     = 0;
-    boolean found          = false; 
-    String payload         = null;
-    String slicedPayload[] = {};
+    Host tmpHost           = null;
+    Cache tmpCache         = null;
+    String slicedPayload[] = null;
+    boolean found          = false;
+    int newHosts           = 0;
+    int newCaches          = 0;
+    int updatedCaches      = 0;
+    int updatedHosts       = 0;
+    int deletedHosts       = 0;
+    int i                  = 0;
+    int hostsSize          = 0;
+    int cachesSize         = 0;
+    long hostIp            = 0;
     
-    Host stuntHost         = null;
-    Cache stuntCache       = null;
-    
+    //String[] hostsToCache  = ;
+    //String[] cachesToCache = ;
+
     try {
     
       // host|timeStamp|ip|port|clientNick|clientVersion|hostUptime|totalLeaves|maxLeaves
@@ -72,190 +95,279 @@ public class UpdateProcessor extends HttpServlet  {
       // --------------------------------------------------------------------------------------------------------
       // url|http://cache.leite.us/|GUAR|0.3|RAZA|2.5.5.3|10|123232323|40|80|false|true
       
-      int i = 0;
-      
-      ds = DatastoreServiceFactory.getDatastoreService();
-      
+      ds    = DatastoreServiceFactory.getDatastoreService();
       queue = QueueFactory.getQueue("update");
       
-      loadLastItem("Host");
-      loadLastItem("Cache");
+      loadData();
       
       while(!((tasks = queue.leaseTasks(30, TimeUnit.SECONDS, 5)).isEmpty())){
         
         for (TaskHandle leasedTask : tasks) {
           
-          payload = new String(leasedTask.getPayload());
+          slicedPayload = (new String(leasedTask.getPayload())).split("\\|");
           
-          slicedPayload = payload.toString().split("|");
-          
-          if(payload.indexOf("host|")==0) {
+          if(slicedPayload[0] == "host") {
             
-            // lookup
-            for(i=0; i<hosts.hosts.size(); ++i) {
-              if(hosts.hosts.get(i).ip == Long.parseLong(slicedPayload[2])) {
-                hosts.hosts.get(i).timeStamp = Long.parseLong(slicedPayload[1]);
-                hosts.hosts.get(i).port      = Long.parseLong(slicedPayload[3]);
-                hosts.hosts.get(i).uptime    = Long.parseLong(slicedPayload[6]);
-                hosts.hosts.get(i).curLeaves = Long.parseLong(slicedPayload[7]);
-                hosts.hosts.get(i).maxLeaves = Long.parseLong(slicedPayload[8]);
+            hostsSize = data.hostsIndex.length;
+            hostIp    = Long.parseLong(slicedPayload[2]);
+            
+            for(i=0; i<hostsSize; ++i) {
+              if(data.hostsIndex[i] == hostIp) {
+                data.hosts.get(i).timeStamp   = Long.parseLong(slicedPayload[1]);
+                data.hosts.get(i).port        = Long.parseLong(slicedPayload[3]);
+                data.hosts.get(i).uptime      = Long.parseLong(slicedPayload[6]);
+                data.hosts.get(i).totalLeaves = Long.parseLong(slicedPayload[7]);
+                data.hosts.get(i).maxLeaves   = Long.parseLong(slicedPayload[8]);
                 found = true;
                 break;
               }
             }
             
-            // if not found create 
             if(!found) {
-             stuntHost = new Host();
-             stuntHost.timeStamp = Long.parseLong(slicedPayload[1]);
-             stuntHost.ip            = Long.parseLong(slicedPayload[2]);
-             stuntHost.port          = Long.parseLong(slicedPayload[3]);
-             stuntHost.clientNick    = slicedPayload[4];
-             stuntHost.clientVersion = slicedPayload[5];
-             stuntHost.uptime        = Long.parseLong(slicedPayload[6]);
-             stuntHost.curLeaves     = Long.parseLong(slicedPayload[7]);
-             stuntHost.maxLeaves     = Long.parseLong(slicedPayload[8]);
-             hosts.hosts.add(stuntHost);
+              tmpHost = new Host();
+              tmpHost.timeStamp     = Long.parseLong(slicedPayload[1]);
+              tmpHost.ip            = hostIp;
+              tmpHost.port          = Long.parseLong(slicedPayload[3]);
+              tmpHost.clientNick    = slicedPayload[4];
+              tmpHost.clientVersion = slicedPayload[5];
+              tmpHost.uptime        = Long.parseLong(slicedPayload[6]);
+              tmpHost.totalLeaves   = Long.parseLong(slicedPayload[7]);
+              tmpHost.maxLeaves     = Long.parseLong(slicedPayload[8]);
+              data.hosts.add(tmpHost);
             }
           } else {
             
-            // lookup
-            for(i=0; i<caches.caches.size(); ++i) {
-              if(caches.caches.get(i).url == slicedPayload[1]) {
-                caches.caches.get(i).cacheVersion  = slicedPayload[2];
-                caches.caches.get(i).cacheVersion  = slicedPayload[3];
-                caches.caches.get(i).clientNick    = slicedPayload[4];
-                caches.caches.get(i).clientVersion = slicedPayload[5];
-                caches.caches.get(i).rank          = Integer.parseInt(slicedPayload[6]);
-                caches.caches.get(i).timeStamp     = Long.parseLong(slicedPayload[7]);
-                caches.caches.get(i).urlCount      = Integer.parseInt(slicedPayload[8]);
-                caches.caches.get(i).ipCount       = Integer.parseInt(slicedPayload[9]);
-                caches.caches.get(i).g1            = Boolean.parseBoolean(slicedPayload[10]);
-                caches.caches.get(i).g2            = Boolean.parseBoolean(slicedPayload[11]);
+            cachesSize = data.cachesIndex.length;
+
+            for(i=0; i<cachesSize; ++i) {
+              if(data.cachesIndex[i] == slicedPayload[1]) {
+                data.caches.get(i).cacheVersion  = slicedPayload[2];
+                data.caches.get(i).cacheVersion  = slicedPayload[3];
+                data.caches.get(i).clientNick    = slicedPayload[4];
+                data.caches.get(i).clientVersion = slicedPayload[5];
+                data.caches.get(i).rank          = Integer.parseInt(slicedPayload[6]);
+                data.caches.get(i).timeStamp     = Long.parseLong(slicedPayload[7]);
+                data.caches.get(i).urlCount      = Integer.parseInt(slicedPayload[8]);
+                data.caches.get(i).ipCount       = Integer.parseInt(slicedPayload[9]);
+                data.caches.get(i).g1            = Boolean.parseBoolean(slicedPayload[10]);
+                data.caches.get(i).g2            = Boolean.parseBoolean(slicedPayload[11]);
                 found = true;
                 break;
               }
             }
 
-            //
             if(!found) {
-              stuntCache = new Cache();
-              stuntCache.url           = slicedPayload[1];
-              stuntCache.cacheVersion  = slicedPayload[2];
-              stuntCache.cacheVersion  = slicedPayload[3];
-              stuntCache.clientNick    = slicedPayload[4];
-              stuntCache.clientVersion = slicedPayload[5];
-              stuntCache.rank          = Integer.parseInt(slicedPayload[6]);
-              stuntCache.timeStamp     = Long.parseLong(slicedPayload[7]);
-              stuntCache.urlCount      = Integer.parseInt(slicedPayload[8]);
-              stuntCache.ipCount       = Integer.parseInt(slicedPayload[9]);
-              stuntCache.g1            = Boolean.parseBoolean(slicedPayload[10]);
-              stuntCache.g2            = Boolean.parseBoolean(slicedPayload[11]);
-              caches.caches.add(stuntCache);
+              tmpCache = new Cache();
+              tmpCache.url           = slicedPayload[1];
+              tmpCache.cacheVersion  = slicedPayload[2];
+              tmpCache.cacheVersion  = slicedPayload[3];
+              tmpCache.clientNick    = slicedPayload[4];
+              tmpCache.clientVersion = slicedPayload[5];
+              tmpCache.rank          = Integer.parseInt(slicedPayload[6]);
+              tmpCache.timeStamp     = Long.parseLong(slicedPayload[7]);
+              tmpCache.firstSeen     = tmpCache.timeStamp;
+              tmpCache.urlCount      = Integer.parseInt(slicedPayload[8]);
+              tmpCache.ipCount       = Integer.parseInt(slicedPayload[9]);
+              tmpCache.g1            = Boolean.parseBoolean(slicedPayload[10]);
+              tmpCache.g2            = Boolean.parseBoolean(slicedPayload[11]);
+              data.caches.add(tmpCache);
             }
           }
+
           queue.deleteTask(leasedTask.getName());
+          found         = false;
+          slicedPayload = null;
+        }
+      }
+
+      //
+      long [] newHostIndex         = new long[data.hosts.size()];
+      StringBuilder hostsToCache[] = new StringBuilder[32];
+      
+      hostsToCache[0] = new StringBuilder();
+      
+      
+      // generate index, cache and clean old objects
+      for(i=0; i<data.hosts.size(); ++i) {
+        if(data.hosts.get(i).timeStamp<hostMaxTime){
+          data.hosts.remove(i);
+          --i;
+        } else {
+          newHostIndex[i] = data.hosts.get(i).ip;
         }
       }
       
-      new logger.LogManager().logInfo( hosts_processed + " host(s), " + urls_processed + " url(s) processed" );
-      
+      new logger.LogManager().logInfo( 
+        String.format( 
+          "\nnew host(s):        %d\nupdated host(s):    %d\ndeleted host(s):    %d\nprocessed host(s)   %d\ntotal host(s):      %d\n\nnew cache(s):     %d\nupdated cache(s):   %d\nprocessed cache(s): %d\ntotal cache(s):     %d",
+          newHosts, updatedHosts, deletedHosts, (updatedHosts+newHosts), data.hosts.size(), newCaches, updatedCaches, (updatedCaches+newCaches), data.caches.size()
+        )
+      );
+
       return;
-      
     } catch ( Exception ex ) {
       
       new logger.LogManager().logExc(ex);
     } finally {
       
-      payload = null;
-      queue = null;
+      queue         = null;
+      tasks         = null; 
+      slicedPayload = null;
+      tmpHost       = null;
+      tmpCache      = null;
     }
     
   }
-  
-  /*
-  MyObject o = new MyObject();
-  Kryo kryo = new Kryo();
-  kryo.register(MyObject.class);
 
-  ObjectBuffer ob = new ObjectBuffer(kryo);
-  byte[] myByteArray = ob.writeObject(o);
-  */
   
-  private void createCache() {
-
-    Output out        = null;
-    Kryo kryo        = null;
-    Entity cache      = null;
+  private void generateCache() {
     
+    boolean leaves  = false;
+    boolean vendors = false;
+    boolean uptime  = false;
+    int i           = 0;
+    int x           = -1;
+    int moduleValue = 0;
+    int cachesSize  = data.caches.size() * 32;
+    int hostsSize   = data.hosts.size() * 32;
+    HashMap <String, String> cacheFragments = new HashMap<String, String>();
+    
+    // load stringBuilder array
+    //for(i = 0; i < 32; ++i) { 
+    //  cacheFragment[i] = new StringBuilder(); 
+    //}
+    
+    // caches array
+    // u|http://cache5.leite.us/|319
+    for(i = 0; i < cachesSize; i+=2) { 
+      
+      moduleValue = i % 32;
+      x += (moduleValue == 0 ? 1 : 0);
+      if(data.caches.get(x).timeStamp < cacheMaxTime) {
+        i += 32;
+        continue;
+      }
+      cacheFragment[moduleValue].append("u|" + data.caches.get(x).url + "|" + (time - data.caches.get(x).timeStamp) + "|\n");
+    }
+    
+    x = -1;
+
+    // hosts array
+    // h|109.213.214.58:6346|241|||RAZA|140487|
+    for(i = 0; i < hostsSize; ++i) {
+      moduleValue = i % 32;
+      x += (moduleValue == 0 ? 1 : 0);
+      if(data.hosts.get(x).timeStamp < hostMaxTime) {
+        i += 32;
+        continue;
+      }
+      
+      if((i%2) == 0) {
+
+        leaves  = (i%4)  == 0;
+        vendors = (i%8)  == 0;
+        uptime  = (i%16) == 0;
+
+        if(leaves || vendors || uptime) {
+          // H|ip:port|age in cache|clustering|leaves|4 letter vendor code|reported uptime of host|max. leaves possible
+          cacheFragment[moduleValue].append(
+            "h|" + numberToIp(data.hosts.get(x).ip) + 
+            ":"  + data.hosts.get(x).port + 
+            "|"  + (time - data.hosts.get(x).timeStamp) +
+            "||" + (leaves  ? data.hosts.get(x).totalLeaves : "") + 
+            "|"  + (vendors ? data.hosts.get(x).clientNick  : "") +
+            "|"  + (uptime  ? data.hosts.get(x).uptime      : "") +
+            "|"  + (leaves  ? data.hosts.get(x).maxLeaves   : "") + "\n"
+          );
+        } else {
+          cacheFragment[moduleValue].append(
+            "h|" + numberToIp(data.hosts.get(x).ip) + 
+            ":"  + data.hosts.get(x).port +
+            "|"  + (time-data.hosts.get(x).timeStamp) + "\n"
+          );  
+        }
+      }
+    }
+    
+    //
+    for(i = 0; i < 32; ++i) {
+
+    }
+    
+  }
+
+  private void saveData() {
+
+    Output out    = null;
+    Kryo kryo     = null;
+    Entity entity = null;
+
     try {
-      cache = new Entity("Cache");
       
-      CacheList cacheList = new CacheList();
-      Cache _cache = new Cache();
-      Cache _cache2 = new Cache();
-      _cache.cacheName = "Joe";
-      _cache.cacheVersion = "2.0";
-      _cache.g1 = true;
-      _cache.firstSeen = 0121212121L;
+      kryo   = new Kryo();
+      out    = new Output(1024, 1024*1024);  
+      entity = new Entity("Data");
       
-      _cache2.cacheName = "Maria";
-      _cache2.cacheVersion = "3.0";
-      _cache2.g1 = false;
-      _cache2.firstSeen = 121212121L;
-      
-      cacheList.caches.add(_cache);
-      cacheList.caches.add(_cache2);
-      
-      kryo = new Kryo();
-      out  = new Output();
       kryo.register(String.class);
+      kryo.register(String[].class);
+      kryo.register(Long[].class);
+      kryo.register(Host.class);
       kryo.register(Cache.class);
       kryo.register(List.class);
-      kryo.register(CacheList.class);
-      kryo.writeObject(out, cacheList);
+      kryo.register(DataHolder.class);
       
-      cache.setProperty("value", out.getBuffer());
-      ds.put(cache);
+      kryo.writeObject(out, data);
+      
+      entity.setProperty("timeStamp", System.currentTimeMillis()/1000);
+      entity.setProperty("value", out.getBuffer());
+      
+      ds.put(entity);
+      
     } catch (Exception ex) {
       ex.printStackTrace();
     } finally {
-      out   = null;
-      kryo  = null;
-      cache = null;
+      out    = null;
+      kryo   = null;
+      entity = null;
     }
   }
-  
-  
+
+
   // 
-  private void loadLastItem(String model) {
-    Query query        = null;
+  private void loadData() {
+    
+    Query query            = null;
     List<Entity> entities  = null;
     PreparedQuery prepared = null;
-    Kryo kryo         = null;
-    Input input         = null;
+    Kryo kryo              = null;
+    Input input            = null;
+    
     try {
-      query = new Query(model);
+      
+      query = new Query("Data");
       query.addSort("timeStamp", SortDirection.DESCENDING);
       prepared = ds.prepare(query);
       entities = prepared.asList(FetchOptions.Builder.withLimit(1));
+      
       if(entities.size()>0) {
+        
         kryo  = new Kryo();
         input = new Input();
         input.setBuffer((byte[]) entities.get(0).getProperty("value"));
-        if(model=="Cache") {
-          kryo.register(Cache.class);
-          kryo.register(List.class);
-          kryo.register(CacheList.class);
-          caches = kryo.readObject(input, CacheList.class);
-        } else {
-          kryo.register(Host.class);
-          kryo.register(List.class);
-          kryo.register(HostList.class);
-          hosts = kryo.readObject(input, HostList.class);
-        }
+        
+        kryo.register(String.class);
+        kryo.register(String[].class);
+        kryo.register(Long[].class);
+        kryo.register(Host.class);
+        kryo.register(Cache.class);
+        kryo.register(List.class);
+        kryo.register(DataHolder.class);
+        
+        data = kryo.readObject(input, DataHolder.class);
       } else {
+        
         //
+        data = new DataHolder();
       }
     } catch (Exception ex) {
       ex.printStackTrace();
@@ -268,50 +380,32 @@ public class UpdateProcessor extends HttpServlet  {
     }
   }
   
-  private void loadLastCache() {
-      DatastoreService ds   = null;
-      Query q               = null;
-      Input input        = null;
-      Kryo kryo             = null;
-      try {
-        ds = DatastoreServiceFactory.getDatastoreService();
-        q = new Query("Coche");
-        q.addSort("timeStamp", SortDirection.DESCENDING);
-        PreparedQuery pq = ds.prepare(q);
-        List<Entity> entities = pq.asList(FetchOptions.Builder.withLimit(1));
-        // 
-        System.out.println(entities.size());
-        if(entities.size()>0) {
-          kryo  = new Kryo();
-          input = new Input(1024 * 1024);
-          Blob blob = (Blob) entities.get(0).getProperty("value");
-          input.setBuffer(blob.getBytes());
-          kryo.register(Cache.class);
-          kryo.register(List.class);
-          kryo.register(CacheList.class);
-          
-          CacheList cacheList = new CacheList();
-          Cache _cache = new Cache();
-          
-          cacheList = kryo.readObject(input, CacheList.class);
-          _cache = cacheList.caches.get(0);
-          System.out.println(_cache.cacheName);
-        }
-      } catch(Exception ex) {
-        ex.printStackTrace();
-      } finally {
-        ds    = null;
-        q     = null;
-        input = null;
-        kryo  = null;
-      }
-    }
-    
-  
+  // convert number to ip
+  private String numberToIp(Long ipNumber){
+   
+    return String.format(
+      "%d.%d.%d.%d", 
+      (int) ((ipNumber/16777216) % 256), 
+      (int) ((ipNumber/65536) % 256), 
+      (int) ((ipNumber/256) % 256), 
+      (int) (ipNumber % 256)
+    );
+  }
+
   // get ip of host
   private long getIpOfUrl( String url ) {
     return 0;
   }
->>>>>>> ca5711c767bce5541307bc15931c54741c8c1e9a
+  
+  //
+  private static Object arrayAlloc(Object oldArray, int newSize) {
+    int oldSize = java.lang.reflect.Array.getLength(oldArray);
+    Class elementType = oldArray.getClass().getComponentType();
+    Object newArray = java.lang.reflect.Array.newInstance(elementType, newSize);
+    int preserveLength = Math.min(oldSize, newSize);
+    if (preserveLength > 0)
+      System.arraycopy(oldArray, 0, newArray, 0, preserveLength);
+    return newArray; 
+  }
 
 }

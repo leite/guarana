@@ -6,7 +6,7 @@ public class Host {
 	public long   timeStamp;
 	public long   ip;
 	public long   port;
-	public long   uptime;
+	public long   uptime;	
 	public long   maxLeaves;
 	public long   totalLeaves;
 }

@@ -62,7 +62,7 @@ public final class MainServlet extends HttpServlet {
   
   public void init(ServletConfig config) throws ServletException {  
     
-    sets          = new Sets( getServletConfig() );
+    sets          = new Sets(getServletConfig());
     cache         = new MemCache();
     clientPattern = Pattern.compile("([^\\d?$?]*)(\\d?[^$]*)$");
     ipPattern     = Pattern.compile("[.?:]");
@@ -160,7 +160,7 @@ public final class MainServlet extends HttpServlet {
   @SuppressWarnings("unchecked")
   public final void doGet(HttpServletRequest rq, HttpServletResponse rs) {
     
-    vars = new Vars( rq.getParameterMap() );
+    vars = new Vars(rq.getParameterMap());
     resp = rs;
     
     StringBuilder content = null, update = null;
