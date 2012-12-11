@@ -3,6 +3,9 @@ package com.main;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import com.google.appengine.api.urlfetch.HTTPMethod;
 import com.google.appengine.api.urlfetch.HTTPRequest;
 import com.google.appengine.api.urlfetch.HTTPResponse;
@@ -38,7 +41,7 @@ public class GnutellaUrlInfo {
   
   //
   @SuppressWarnings("deprecation")
-  public boolean getUrl( String url, String network, String cacheVendor, String cacheVersion ) {
+  public boolean getUrl(String url, String network, String cacheVendor, String cacheVersion) {
     
     HTTPRequest request     = null;
     HTTPResponse response   = null;
@@ -52,8 +55,9 @@ public class GnutellaUrlInfo {
     
     try {
       
-      url = url + "?client=RAZA&version=" + URLEncoder.encode( cacheVendor + " " + cacheVersion ) + "&getnetworks=1&cache=1&net=" + URLEncoder.encode(network) + "&ping=1&get=1&hostfile=1&urlfile=1";
-      _url = new URL(url);
+      System.out.println("call to ... " + url);
+      
+      _url = new URL(url + "?client="+ cacheVendor +"&version=" + URLEncoder.encode(cacheVendor + " " + cacheVersion) + "&getnetworks=1&cache=1&net=" + URLEncoder.encode(network) + "&ping=1&get=1&hostfile=1&urlfile=1");
       
       // request settings, allow truncated and no redirects please
       request = new HTTPRequest( _url , HTTPMethod.GET, Builder.allowTruncate().doNotFollowRedirects());
@@ -61,10 +65,22 @@ public class GnutellaUrlInfo {
       
       response = service.fetch(request);
       
-      if ( response.getResponseCode() != 200 ) { /* you can debug here */ return false; }
+      if ( response.getResponseCode() != 200 ) { /* you can debug here */
+        System.out.println(url);
+        System.out.println(response.getResponseCode());
+        System.out.println(new String(response.getContent(), "UTF-8").toLowerCase());
+        return false; 
+      }
       
       // convert bytes to string
       html = new String(response.getContent(), "UTF-8").toLowerCase();
+      this.url = url;
+
+      //
+      System.out.println(" == == == ==");
+      System.out.println(html);
+      System.out.println(" == == == ==");
+
       // basic errors
       if( html.indexOf("ERROR")>-1 ){ return false; }
       if( html.indexOf(">")>-1 ){ return false; }
@@ -83,35 +99,48 @@ public class GnutellaUrlInfo {
           iAccess = Long.parseLong(lines[i].substring(16, lines[i].length() ).replace("\r",""));
         }else if (lines[i].indexOf("i|pong")==0){
           
-          cacheName= lines[i].substring( 7, lines[i].length() );
-          cacheName= cacheName.substring( 0, cacheName.indexOf("|") );
+          // should parse
+          // i|pong|skulls 0.2.8|gnutella-gnutella2|1|tcp 
+          // i|pong|boa|gnutella2
+          // i|pong|DKAC/Enticing-Enumon 
+          // i|pong|Guarana 0.2|gnutella2"
+          Pattern identify = Pattern.compile("i\\|pong\\|([^\\s?\\|$?]*)\\s?([^\\|?$?]*)\\|?$?([^\\|?$?]*)\\|?$?", Pattern.DOTALL);
+          Matcher matched = identify.matcher(lines[i]);
           
-          if( cacheName.indexOf(" ")>-1 ){
-            cacheVersion= cacheName.substring( cacheName.lastIndexOf(" ")+1, cacheName.length() );
-            cacheName = cacheName.substring( 0, cacheName.lastIndexOf(" ") );
-          }else{
-            cacheVersion = "0";
+          if(matched.find()) {
+            cacheName    = matched.group(1);
+            cacheVersion = matched.group(2) == "" ? "0" : matched.group(2);
+            if(matched.group(3) != "") {
+              netList = matched.group(3).split("\\-");
+            }
           }
         }
       }
       //
-      rank += urlCount<4? 0:(urlCount>10? 10:5);
-      rank += ipCount<5? 0:(ipCount>20? 10:5);
-      rank += netList.length>0? 10:0;
-      rank += iAccess>3000? 10:(iAccess>1000? 8:0);
-      rank += cacheName.length()>2? 10:0;
+      rank += urlCount < 4 ? 0 : (urlCount > 10 ? 10 : 5);
+      rank += ipCount < 5  ? 0 : (ipCount  > 20 ? 10 : 5);
+      rank += (netList == null) ? 0 : (netList.length > 0 ? 10: 0);
+      rank += iAccess > 3000 ? 10 : (iAccess > 1000 ? 8 : 0 );
+      rank += cacheName.length() > 2 ? 10 : 0;
       //
-      rank = rank/5;
+      rank = rank / 5;
       //
-      len = netList.length;
-      for ( i=0; i<len; ++i ) {
-        if( netList[i].equals("gnutella") )  { g1 = true; }
-        if( netList[i].equals("gnutella2") ) { g2 = true; }
+      if(netList == null) {
+        g2 = true;
+      } else {
+        len = netList.length;
+        for ( i=0; i<len; ++i ) {
+          if( netList[i].equals("gnutella") )  { g1 = true; }
+          if( netList[i].equals("gnutella2") ) { g2 = true; }
+        } 
       }
+      
       return true;
     } catch ( IOException ex ) {  
       
-      ex.printStackTrace(); return false;
+      ex.printStackTrace();
+      new logger.LogManager().logExc(ex);
+      return false;
     } finally {
       
       request  = null;

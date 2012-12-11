@@ -166,14 +166,14 @@ public final class MainServlet extends HttpServlet {
     StringBuilder content = null, update = null;
     ServletOutputStream out = null;
     
-    createCache();
-    loadLastCache();
-    
     try {
       
       content = new StringBuilder();
       update  = new StringBuilder();
       out     = rs.getOutputStream();
+      
+      rs.setContentType("text/plain");
+      rs.setCharacterEncoding("UTF-8");
       
       // DEBUG purposes
       if( sets.debug && ( vars.dump || vars.truncate ) ) {
@@ -219,16 +219,16 @@ public final class MainServlet extends HttpServlet {
             
             Long[] validIp;
               
-            if( (validIp = validateIp(vars.ip)) == null ){
+            if ((validIp = validateIp(vars.ip)) == null) {
               update.append( "i|update|WARNING|Invalid Ip\n" );
             }else{
               
-              if( isTooEarly(validIp[0]) ) {
+              if (isTooEarly(validIp[0])) {
                 update.append("i|update|WARNING|Returned too soon\n");
               } else {
                 
                 //POSSIBLY RAZA 2.2.5.6 BUG!
-                if( vars.xLeaves>vars.xMax ){
+                if (vars.xLeaves>vars.xMax) {
                   update.append("i|update|WARNING|Bad host\n");
                 }else{
                   pushHostToQueue(validIp[0], validIp[1]);
@@ -238,17 +238,17 @@ public final class MainServlet extends HttpServlet {
             
           }
           
-          if( vars.url != null ){
+          if (vars.url != null) {
             
             String validUrl;
             
-            if( (validUrl = validateUrl(vars.url)).isEmpty() ) {
+            if ((validUrl = validateUrl(vars.url)).isEmpty()) {
               update.append("i|update|WARNING|\n");
             } else {
               
               GnutellaUrlInfo info = new GnutellaUrlInfo();
               
-              if( info.getUrl(validUrl, vars.net, sets.cacheVendor, sets.cacheVersion) ) {
+              if(info.getUrl(validUrl, vars.net, sets.cacheVendor, sets.cacheVersion)) {
                 
                 // push information to update queue
                 pushUrlToQueue(info);
@@ -266,88 +266,95 @@ public final class MainServlet extends HttpServlet {
         // everything is fine
         rs.setStatus(200);
         
-        // concatenate content (pong+networks) + urls / ips + update information
-        out.println(
-            content.toString()
-            + getContentFromCache()
-            + update.toString()
-        );
+        out.print(content.toString());
+        out.print(getContentFromCache());
+        out.print(update.toString());
+        
+        System.out.println(vars.update);
+        System.out.println(vars.get);
+        
+        if(vars.update==true || vars.get==true){
+        	out.print("i|access|period|"+ sets.accessWait + "\n");
+        }
         
         content.setLength(0);
         update.setLength(0);
         return;
       }
       
-    } catch ( IOException ex ) {
+    } catch (IOException ex) {
       new logger.LogManager().logExc(ex);
     } finally {
-      vars = null;
+      vars    = null;
       content = null;
-      update = null;
-      out = null;
+      update  = null;
+      out     = null;
     }
   }
   
   // pong
-  private final String doPong( boolean withNets ){
-    return "i|pong|" + sets.cacheName + " " + sets.cacheVersion + ((withNets)? '|'+ join( sets.supportedNetworks, "-" ): "" ) + "\n";
+  private final String doPong(boolean withNets){
+    return "i|pong|" + sets.cacheName + " " + sets.cacheVersion + ((withNets)? '|'+ join(sets.supportedNetworks, "-") : "") + "\n";
   }
         
   // list supported networks
   private final String listNets(){
-    return "i|networks|" + join(sets.supportedNetworks,"|") + "\ni|nets|"+ join(sets.supportedNetworks,"-") +"\n";
+    return "i|networks|" + join(sets.supportedNetworks, "|") + "\ni|nets|"+ join(sets.supportedNetworks, "-") +"\n";
   }  
   
   // validate ip range and port
-  private final Long[] validateIp( String host ) {
+  private final Long[] validateIp(String host) {
     try {
     
-      if( host == null || host == "" )
+      if(host == null || host == "")
         return null;
       
-          String[] ret = ipPattern.split(host);
+      String[] ret = ipPattern.split(host);
+      
+      if (ret==null || ret.length!=5)
+        return null;
+      
+      long ip, e, a, b, c, d;
+      
+      a = Long.parseLong(ret[0]);
+      b = Long.parseLong(ret[1]);
+      c = Long.parseLong(ret[2]);
+      d = Long.parseLong(ret[3]);
+      e = Long.parseLong(ret[4]);
+      
+      if (a>255 || b>255 || c>255 || d>255 || e>65555) 
+        return null;
+      
+      ip = (16777216 * a) + (65536 * b) + (256 * c) + d;
+      
+      if(ip > 0L && 16777215L > ip || ip > 167772160L && 184549375L > ip || ip > 2130706432L && 2147483647L > ip || ip > 2851995648L && 2852061183L > ip ||
+      ip > 2886729728L && 2887778303L > ip || ip > 3221225984L && 3221226239L > ip || ip > 3227017984L && 3227018239L > ip ||
+      ip > 3232235520L && 3232301055L > ip || ip > 3323068416L && 3323199487L > ip || ip > 3325256704L && 3325256959L > ip ||
+      ip > 3405803776L && 3405804031L > ip || ip > 3758096384L && 4026531839L > ip || ip > 4026531840L && 4294967295L > ip)
+        return null;
+      
+      Long[] valid = { ip, e };
+      
+      return valid;
           
-          if ( ret==null || ret.length!=5 )
-            return null;
-          
-          long ip, e, a, b, c, d;
-          
-          a = Long.parseLong(ret[0]);
-          b = Long.parseLong(ret[1]);
-          c = Long.parseLong(ret[2]);
-          d = Long.parseLong(ret[3]);
-          e = Long.parseLong(ret[4]);
-          
-          if ( a>255 || b>255 || c>255 || d>255 || e>65555 ) 
-            return null;
-          
-          ip = (16777216 * a) + (65536 * b) + (256 * c) + d;
-          
-          if( ip > 0L && 16777215L > ip || ip > 167772160L && 184549375L > ip || ip > 2130706432L && 2147483647L > ip || ip > 2851995648L && 2852061183L > ip ||
-          ip > 2886729728L && 2887778303L > ip || ip > 3221225984L && 3221226239L > ip || ip > 3227017984L && 3227018239L > ip ||
-          ip > 3232235520L && 3232301055L > ip || ip > 3323068416L && 3323199487L > ip || ip > 3325256704L && 3325256959L > ip ||
-          ip > 3405803776L && 3405804031L > ip || ip > 3758096384L && 4026531839L > ip || ip > 4026531840L && 4294967295L > ip )
-            return null;
-          
-          Long[] valid = { ip, e };
-          
-          return valid;
-          
-    } catch ( Exception ex ) {
+    } catch (Exception ex) {
       return null;
     }
   }
   
   //validate Url
-  private final String validateUrl( String url ){
+  private final String validateUrl(String url) {
     
-    if( url.isEmpty() ) { return ""; }
+    if(url.isEmpty()) { return ""; }
     
     String pattern = "\\b(http)://[-a-zA-Z0-9+&@#/%?=~_|!:,.;]*[-a-zA-Z0-9+&@#/%=~_|]";
-    if( !url.matches(pattern) ){ return ""; }
+    if(!url.matches(pattern)) { return ""; }
     
     Iterator<String> it = sets.urlBlacklist.iterator();
-    while (it.hasNext()) { if( url.indexOf(it.next())>-1 ){ return ""; } } 
+    while (it.hasNext()) { 
+      if(url.indexOf(it.next()) > -1)
+        return ""; 
+    } 
     
     return url.toLowerCase().replaceAll("\\/(default|index)\\.(aspx|php|cgi|cfm|asp|pl|lp|jsp|js)", "");
   }
@@ -356,21 +363,21 @@ public final class MainServlet extends HttpServlet {
   private final String getContentFromCache() {
     
     String cacheContent = null;
-    if ( vars.bFile || vars.get || (vars.hostFile && vars.urlFile) ) { // - leaves - vendors - uptime
-      cacheContent = cache.get("url_ip" + ( vars.getLeaves ? "_leaves":"" ) + ( vars.getVendors ? "_vendors" : "" ) + ( vars.getUptime ? "_uptime" : "" ) ); 
-    }else if ( vars.urlFile || vars.gwcs ){
+    if (vars.bFile || vars.get || (vars.hostFile && vars.urlFile)) { // - leaves - vendors - uptime
+      cacheContent = cache.get("url_ip" + (vars.getLeaves ? "_leaves":"") + (vars.getVendors ? "_vendors" : "") + (vars.getUptime ? "_uptime" : "")); 
+    } else if (vars.urlFile || vars.gwcs) {
       cacheContent = cache.get("url");
-    }else if ( vars.hostFile || vars.showHosts ) {
-      cacheContent = cache.get("ip" + ( vars.getLeaves ? "_leaves":"" ) + ( vars.getVendors ? "_vendors" : "" ) + ( vars.getUptime ? "_uptime" : "" ) );
+    } else if (vars.hostFile || vars.showHosts) {
+      cacheContent = cache.get("ip" + (vars.getLeaves ? "_leaves":"") + (vars.getVendors ? "_vendors" : "") + (vars.getUptime ? "_uptime" : ""));
     }
     return cacheContent==null ? "" : cacheContent;
   }
   
   // push host to update queue
-  private void pushUrlToQueue( GnutellaUrlInfo info ) {
+  private void pushUrlToQueue(GnutellaUrlInfo info) {
     
-    StringBuffer payload = new StringBuffer();
-    Queue queue = QueueFactory.getQueue("update");
+    StringBuilder payload = new StringBuilder();
+    Queue queue           = QueueFactory.getQueue("update");
     
     // url|url (address)|cacheName|cacheVersion|clientNick|clientVersion|rank|timeStamp|urlCount|ipCount|g1|g2
     //
@@ -391,15 +398,16 @@ public final class MainServlet extends HttpServlet {
     
     queue.add(TaskOptions.Builder.withMethod(Method.PULL).payload(payload.toString()));
     
+    payload.setLength(0);
     payload = null;
-    queue = null;
+    queue   = null;
   }
   
   // push host to update queue
-  private void pushHostToQueue( long ip, long port ) {
+  private void pushHostToQueue(long ip, long port) {
     
-    StringBuffer payload = new StringBuffer();
-    Queue queue = QueueFactory.getQueue("update");
+    StringBuilder payload = new StringBuilder();
+    Queue queue           = QueueFactory.getQueue("update");
     
     // host|timeStamp|ip|port|clientNick|clientVersion|hostUptime|totalLeaves|maxLeaves
     //
@@ -417,20 +425,20 @@ public final class MainServlet extends HttpServlet {
     
     queue.add(TaskOptions.Builder.withMethod(Method.PULL).payload(payload.toString()));
     
+    payload.setLength(0);
     payload = null;
-    queue = null;
+    queue   = null;
   }
   
   // access control to avoid ddos
-  private final boolean isTooEarly( Long ip ){
+  private final boolean isTooEarly(Long ip){
     
-    if ( cache.increaseKey( ip, sets.accessWait ) > 2 ) { return true; }
-    
+    if (cache.increaseKey(ip, sets.accessWait) > 2) { return true; }
     return false;
   }
   
   // send error
-  private final void sendError( String message ) { 
+  private final void sendError(String message) { 
     
     System.out.println("sendError: "+ message);
     
@@ -444,12 +452,12 @@ public final class MainServlet extends HttpServlet {
   }
     
   // validate network against supported networks
-  private final boolean validateNet( String net ) {
+  private final boolean validateNet(String net) {
     
-    if( net == null ) 
+    if(net == null) 
       return false;
       
-    if( sets.supportedNetworks.contains(net.toLowerCase()) ) 
+    if(sets.supportedNetworks.contains(net.toLowerCase())) 
       return true;
     
     return false;
@@ -460,13 +468,13 @@ public final class MainServlet extends HttpServlet {
     // client match
     Matcher clientMatch = clientPattern.matcher(vars.client);
     // assert search
-    if(!clientMatch.find()) { return; }
+    if(!clientMatch.find())         { return; }
     if(clientMatch.groupCount()!=2) { return; }
     // version match
     if(clientMatch.group(2).isEmpty() && vars.version!=null) {
       Matcher versionMatch = clientPattern.matcher(vars.version);
       // assert search
-      if(!versionMatch.find()) { return; }
+      if(!versionMatch.find())         { return; }
       if(versionMatch.groupCount()!=2) { return; }
       if(clientMatch.group(1).equals("TEST") && !versionMatch.group(1).isEmpty()){
         vars.client  = clientMatch.group(1) + versionMatch.group(1);

@@ -1,8 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
-<web-app xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://java.sun.com/xml/ns/javaee"
-  xmlns:web="http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd"
-  xsi:schemaLocation="http://java.sun.com/xml/ns/javaee
-  http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd" version="2.5">
+<?xml version="1.0" encoding="utf-8" standalone="no"?><web-app xmlns="http://java.sun.com/xml/ns/javaee" xmlns:web="http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.5" xsi:schemaLocation="http://java.sun.com/xml/ns/javaee   http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd">
   
   <servlet>
     
@@ -14,31 +10,29 @@
     <init-param> <param-name>maxIpsToStore</param-name> <param-value>100</param-value> </init-param>
     <init-param> <param-name>maxIpsToShow</param-name> <param-value>80</param-value> </init-param>
     <init-param> <param-name>maxUrlsToStore</param-name> <param-value>100</param-value> </init-param>
-    <init-param> <param-name>hostExpirationTime</param-name> <param-value>21600</param-value> </init-param>   <!-- 6 hours -->
-    <init-param> <param-name>urlExpirationTime</param-name> <param-value>86400</param-value> </init-param>     <!-- 24 hours -->
-    <init-param> <param-name>accessWait</param-name> <param-value>1800</param-value> </init-param>        <!-- 30 minutes -->
+    <init-param> <param-name>hostExpirationTime</param-name> <param-value>21600</param-value> </init-param>     <!-- 6 hours -->
+    <init-param> <param-name>urlExpirationTime</param-name> <param-value>86400</param-value> </init-param>      <!-- 24 hours -->
+    <init-param> <param-name>accessWait</param-name> <param-value>1800</param-value> </init-param>              <!-- 30 minutes -->
     <init-param> <param-name>supportedNetworks</param-name> <param-value>gnutella2</param-value> </init-param>  <!-- ex: gnutella2 or gnutella;gnutella2 for both (still not gnutella ready only gnutella2) --> 
     <init-param> 
       <param-name>urlBlacklist</param-name> 
       <param-value>nyud.net;nyucd.net;noneexiste.net;spearforensics.com;divergentlogic.net;gofoxy.net</param-value> 
     </init-param>
-    <init-param> <param-name>cacheName</param-name> <param-value>Guarana</param-value> </init-param>      <!-- please preserve -->
-    <init-param> <param-name>cacheVendor</param-name> <param-value>GUAR</param-value> </init-param>        <!-- please preserve -->
-    <init-param> <param-name>cacheVersion</param-name> <param-value>0.3</param-value> </init-param>        <!-- please preserve -->
-    <init-param> <param-name>appUrl</param-name> <param-value>http://127.0.0.1:8888</param-value> </init-param>  <!-- must change -->
+    <init-param> <param-name>cacheName</param-name> <param-value>Guarana</param-value> </init-param>            <!-- please preserve -->
+    <init-param> <param-name>cacheVendor</param-name> <param-value>GUAR</param-value> </init-param>             <!-- please preserve -->
+    <init-param> <param-name>cacheVersion</param-name> <param-value>0.3</param-value> </init-param>             <!-- please preserve -->
+    <init-param> <param-name>appUrl</param-name> <param-value>http://127.0.0.1:8888</param-value> </init-param> <!-- must change -->
     
   </servlet>
   
   <servlet-mapping>
-   
     <servlet-name>Guarana</servlet-name>
     <url-pattern>/</url-pattern>
-    
   </servlet-mapping>
 
   <context-param> 
     <param-name>com.sun.faces.enableThreading</param-name> 
-    <param-value>false</param-value> 
+    <param-value>true</param-value> 
   </context-param>
 
   <servlet>
@@ -46,7 +40,7 @@
     <servlet-class>com.main.UpdateProcessor</servlet-class>
 
     <init-param> <param-name>hostExpirationTime</param-name> <param-value>21600</param-value> </init-param>   <!-- 6 hours -->
-    <init-param> <param-name>urlExpirationTime</param-name> <param-value>86400</param-value> </init-param>     <!-- 24 hours -->
+    <init-param> <param-name>urlExpirationTime</param-name> <param-value>86400</param-value> </init-param>    <!-- 24 hours -->
   </servlet>
 
   <servlet-mapping>
@@ -54,4 +48,16 @@
     <url-pattern>/update/all</url-pattern>
   </servlet-mapping>
   
+ <servlet>
+  <servlet-name>SystemServiceServlet</servlet-name>
+  <servlet-class>com.google.api.server.spi.SystemServiceServlet</servlet-class>
+  <init-param>
+   <param-name>services</param-name>
+   <param-value/>
+  </init-param>
+ </servlet>
+ <servlet-mapping>
+  <servlet-name>SystemServiceServlet</servlet-name>
+  <url-pattern>/_ah/spi/*</url-pattern>
+ </servlet-mapping>
 </web-app>

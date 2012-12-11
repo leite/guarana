@@ -11,21 +11,25 @@
 
 package com.main;
 
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import javax.servlet.ServletConfig;
+import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import appengine.MemCache;
+
 import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.Serializer;
 import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.serializers.CollectionSerializer;
-import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import com.esotericsoftware.kryo.io.Output;
 
 import com.google.appengine.api.datastore.Blob;
@@ -43,25 +47,16 @@ import com.google.appengine.api.taskqueue.TaskHandle;
 @SuppressWarnings("serial")
 public class UpdateProcessor extends HttpServlet  {
   
-  //private CacheList caches;
-  //private HostList hosts;
+  private MemCache cache;
   private DataHolder data;
   DatastoreService ds;
   long hostMaxTime;
   long cacheMaxTime;
   long time;
   
-  public UpdateProcessor() {
-    
-    //
-    
-  }
-  
-  public void init(ServletConfig config) throws ServletException { 
-    time = Math.round((new Date()).getTime() / 1000); 
-    hostMaxTime  = (time - Long.parseLong(getServletConfig().getInitParameter("hostExpirationTime")));
-    cacheMaxTime = (time - Long.parseLong(getServletConfig().getInitParameter("urlExpirationTime")));
+  public void init(ServletConfig config) throws ServletException {
     super.init(config);
+    cache = new MemCache(); 
   }
 
   public final void doGet(HttpServletRequest rq, HttpServletResponse rs) {
@@ -72,18 +67,12 @@ public class UpdateProcessor extends HttpServlet  {
     Cache tmpCache         = null;
     String slicedPayload[] = null;
     boolean found          = false;
-    int newHosts           = 0;
-    int newCaches          = 0;
-    int updatedCaches      = 0;
-    int updatedHosts       = 0;
-    int deletedHosts       = 0;
-    int i                  = 0;
-    int hostsSize          = 0;
-    int cachesSize         = 0;
     long hostIp            = 0;
+    time                   = Math.round((new Date()).getTime() / 1000);
+    hostMaxTime            = (time - Long.parseLong(getServletConfig().getInitParameter("hostExpirationTime")));
+    cacheMaxTime           = (time - Long.parseLong(getServletConfig().getInitParameter("urlExpirationTime")));
+    int newHosts = 0, newCaches = 0, updatedCaches = 0, updatedHosts = 0, deletedHosts = 0, i = 0, hostsSize = 0, cachesSize = 0;
     
-    //String[] hostsToCache  = ;
-    //String[] cachesToCache = ;
 
     try {
     
@@ -105,8 +94,14 @@ public class UpdateProcessor extends HttpServlet  {
         for (TaskHandle leasedTask : tasks) {
           
           slicedPayload = (new String(leasedTask.getPayload())).split("\\|");
+          //for(i=0; i<slicedPayload.length; ++i) {
+          //  System.out.println(i +") >> "+ slicedPayload[i]);
+          //}
           
-          if(slicedPayload[0] == "host") {
+          //System.out.println(slicedPayload[0].compareTo("host"));
+          //System.out.println(slicedPayload[0].compareTo("cache"));
+          
+          if(slicedPayload[0].compareTo("host") == 0) {
             
             hostsSize = data.hostsIndex.length;
             hostIp    = Long.parseLong(slicedPayload[2]);
@@ -118,6 +113,7 @@ public class UpdateProcessor extends HttpServlet  {
                 data.hosts.get(i).uptime      = Long.parseLong(slicedPayload[6]);
                 data.hosts.get(i).totalLeaves = Long.parseLong(slicedPayload[7]);
                 data.hosts.get(i).maxLeaves   = Long.parseLong(slicedPayload[8]);
+                ++updatedHosts;
                 found = true;
                 break;
               }
@@ -134,14 +130,15 @@ public class UpdateProcessor extends HttpServlet  {
               tmpHost.totalLeaves   = Long.parseLong(slicedPayload[7]);
               tmpHost.maxLeaves     = Long.parseLong(slicedPayload[8]);
               data.hosts.add(tmpHost);
+              ++newHosts;
             }
           } else {
             
             cachesSize = data.cachesIndex.length;
 
             for(i=0; i<cachesSize; ++i) {
-              if(data.cachesIndex[i] == slicedPayload[1]) {
-                data.caches.get(i).cacheVersion  = slicedPayload[2];
+              if(data.cachesIndex[i].compareTo(slicedPayload[1]) == 0) {
+                data.caches.get(i).cacheName     = slicedPayload[2];
                 data.caches.get(i).cacheVersion  = slicedPayload[3];
                 data.caches.get(i).clientNick    = slicedPayload[4];
                 data.caches.get(i).clientVersion = slicedPayload[5];
@@ -151,6 +148,7 @@ public class UpdateProcessor extends HttpServlet  {
                 data.caches.get(i).ipCount       = Integer.parseInt(slicedPayload[9]);
                 data.caches.get(i).g1            = Boolean.parseBoolean(slicedPayload[10]);
                 data.caches.get(i).g2            = Boolean.parseBoolean(slicedPayload[11]);
+                ++updatedCaches;
                 found = true;
                 break;
               }
@@ -159,7 +157,7 @@ public class UpdateProcessor extends HttpServlet  {
             if(!found) {
               tmpCache = new Cache();
               tmpCache.url           = slicedPayload[1];
-              tmpCache.cacheVersion  = slicedPayload[2];
+              tmpCache.cacheName     = slicedPayload[2];
               tmpCache.cacheVersion  = slicedPayload[3];
               tmpCache.clientNick    = slicedPayload[4];
               tmpCache.clientVersion = slicedPayload[5];
@@ -171,6 +169,7 @@ public class UpdateProcessor extends HttpServlet  {
               tmpCache.g1            = Boolean.parseBoolean(slicedPayload[10]);
               tmpCache.g2            = Boolean.parseBoolean(slicedPayload[11]);
               data.caches.add(tmpCache);
+              ++newCaches;
             }
           }
 
@@ -179,23 +178,19 @@ public class UpdateProcessor extends HttpServlet  {
           slicedPayload = null;
         }
       }
-
-      //
-      long [] newHostIndex         = new long[data.hosts.size()];
-      StringBuilder hostsToCache[] = new StringBuilder[32];
       
-      hostsToCache[0] = new StringBuilder();
-      
-      
-      // generate index, cache and clean old objects
+      // clean old objects
       for(i=0; i<data.hosts.size(); ++i) {
-        if(data.hosts.get(i).timeStamp<hostMaxTime){
+        if(data.hosts.get(i).timeStamp < hostMaxTime){
           data.hosts.remove(i);
+          ++deletedHosts;
           --i;
-        } else {
-          newHostIndex[i] = data.hosts.get(i).ip;
         }
       }
+      
+      generateCache();
+      
+      saveData();
       
       new logger.LogManager().logInfo( 
         String.format( 
@@ -206,7 +201,7 @@ public class UpdateProcessor extends HttpServlet  {
 
       return;
     } catch ( Exception ex ) {
-      
+      //ex.printStackTrace();
       new logger.LogManager().logExc(ex);
     } finally {
       
@@ -215,6 +210,8 @@ public class UpdateProcessor extends HttpServlet  {
       slicedPayload = null;
       tmpHost       = null;
       tmpCache      = null;
+      
+      System.gc();
     }
     
   }
@@ -222,78 +219,91 @@ public class UpdateProcessor extends HttpServlet  {
   
   private void generateCache() {
     
-    boolean leaves  = false;
-    boolean vendors = false;
-    boolean uptime  = false;
-    int i           = 0;
-    int x           = -1;
-    int moduleValue = 0;
-    int cachesSize  = data.caches.size() * 32;
-    int hostsSize   = data.hosts.size() * 32;
-    HashMap <String, String> cacheFragments = new HashMap<String, String>();
+    Set<String> cacheKeys = new HashSet<String>();
+    StringBuilder content = new StringBuilder();
+    String[] cachesIndex  = new String[data.caches.size()];
+  Long[] hostsIndex     = new Long[data.hosts.size()];
+  String cacheKey       = null; 
     
-    // load stringBuilder array
-    //for(i = 0; i < 32; ++i) { 
-    //  cacheFragment[i] = new StringBuilder(); 
-    //}
+    int i, x = 0, z, totalCaches, totalHosts, totalLoop;
+    boolean isLeaves = false, isVendors = false, isUptime = false, isIp = false, isCache = false, isIndexed = false;
     
-    // caches array
-    // u|http://cache5.leite.us/|319
-    for(i = 0; i < cachesSize; i+=2) { 
+    totalCaches = data.caches.size();
+    totalHosts  = data.hosts.size();
+    totalLoop   = (totalHosts + totalCaches) * 32;
+    
+    for(i = 0; i < totalLoop; ++i) {
+      z = i % (totalHosts + totalCaches);
       
-      moduleValue = i % 32;
-      x += (moduleValue == 0 ? 1 : 0);
-      if(data.caches.get(x).timeStamp < cacheMaxTime) {
-        i += 32;
-        continue;
-      }
-      cacheFragment[moduleValue].append("u|" + data.caches.get(x).url + "|" + (time - data.caches.get(x).timeStamp) + "|\n");
-    }
-    
-    x = -1;
-
-    // hosts array
-    // h|109.213.214.58:6346|241|||RAZA|140487|
-    for(i = 0; i < hostsSize; ++i) {
-      moduleValue = i % 32;
-      x += (moduleValue == 0 ? 1 : 0);
-      if(data.hosts.get(x).timeStamp < hostMaxTime) {
-        i += 32;
-        continue;
+      if(z==0) {
+        isCache   = (x&1)  == 0;
+        isIp      = (x&2)  == 0;
+        isLeaves  = (x&4)  == 0;
+        isVendors = (x&8)  == 0;
+        isUptime  = (x&16) == 0;
+        
+        cacheKey = (isCache ? "url" : "") + (isIp ? "_ip" + (isLeaves ? "_leaves" : "") + (isVendors ? "_vendors" : "") + (isUptime ? "_uptime" : "") : "");
+        
+        if(cacheKeys.contains(cacheKey)) {
+          ++x;
+          i += totalHosts + totalCaches - 1;
+          continue;
+        }
+        
+        cacheKeys.add(cacheKey);
       }
       
-      if((i%2) == 0) {
-
-        leaves  = (i%4)  == 0;
-        vendors = (i%8)  == 0;
-        uptime  = (i%16) == 0;
-
-        if(leaves || vendors || uptime) {
-          // H|ip:port|age in cache|clustering|leaves|4 letter vendor code|reported uptime of host|max. leaves possible
-          cacheFragment[moduleValue].append(
-            "h|" + numberToIp(data.hosts.get(x).ip) + 
-            ":"  + data.hosts.get(x).port + 
-            "|"  + (time - data.hosts.get(x).timeStamp) +
-            "||" + (leaves  ? data.hosts.get(x).totalLeaves : "") + 
-            "|"  + (vendors ? data.hosts.get(x).clientNick  : "") +
-            "|"  + (uptime  ? data.hosts.get(x).uptime      : "") +
-            "|"  + (leaves  ? data.hosts.get(x).maxLeaves   : "") + "\n"
-          );
-        } else {
-          cacheFragment[moduleValue].append(
-            "h|" + numberToIp(data.hosts.get(x).ip) + 
-            ":"  + data.hosts.get(x).port +
-            "|"  + (time-data.hosts.get(x).timeStamp) + "\n"
-          );  
+      if(x > 0 && !isIndexed) {
+        data.cachesIndex = cachesIndex;
+        data.hostsIndex  = hostsIndex;
+        isIndexed = true;
+      }
+      
+      if(totalCaches <= z) {
+      // index
+      if(!isIndexed) {
+        hostsIndex[z-totalCaches] = data.hosts.get(z-totalCaches).ip;
+      }
+        // hosts array
+        // H|ip:port|age in cache|clustering|leaves|4 letter vendor code|reported uptime of host|max. leaves possible
+        // h|109.213.214.58:6346|241|||RAZA|140487|
+        if(isIp) {
+          if(isLeaves || isVendors || isUptime) {
+            content.append(
+              "h|" + numberToIp(data.hosts.get(z-totalCaches).ip) + 
+              ":"  + data.hosts.get(z-totalCaches).port + 
+              "|"  + (time - data.hosts.get(z-totalCaches).timeStamp) +
+              "||" + (isLeaves  ? data.hosts.get(z-totalCaches).totalLeaves : "") + 
+              "|"  + (isVendors ? data.hosts.get(z-totalCaches).clientNick  : "") +
+              "|"  + (isUptime  ? data.hosts.get(z-totalCaches).uptime      : "") +
+              "|"  + (isLeaves  ? data.hosts.get(z-totalCaches).maxLeaves   : "") + "\n"
+            );
+          } else {
+            content.append(
+              "h|" + numberToIp(data.hosts.get(z-totalCaches).ip) + 
+              ":"  + data.hosts.get(z-totalCaches).port +
+              "|"  + (time-data.hosts.get(z-totalCaches).timeStamp) + "\n"
+            );  
+          }
+        }
+      } else {
+      // index
+      if(!isIndexed) {
+        cachesIndex[z] = data.caches.get(z).url;
+      }
+        // caches array
+        // u|http://cache5.leite.us/|319
+        if(isCache && data.caches.get(z).timeStamp > cacheMaxTime) {
+          content.append("u|" + data.caches.get(z).url + "|" + (time - data.caches.get(z).timeStamp) + "\n");
         }
       }
+      
+      if(z == (totalHosts + totalCaches - 1)) {
+      cache.set(cacheKey, content.toString(), 3600);
+        content.setLength(0);
+        ++x;
+      }
     }
-    
-    //
-    for(i = 0; i < 32; ++i) {
-
-    }
-    
   }
 
   private void saveData() {
@@ -319,12 +329,13 @@ public class UpdateProcessor extends HttpServlet  {
       kryo.writeObject(out, data);
       
       entity.setProperty("timeStamp", System.currentTimeMillis()/1000);
-      entity.setProperty("value", out.getBuffer());
+      entity.setProperty("value", new Blob(out.getBuffer()));
       
       ds.put(entity);
       
     } catch (Exception ex) {
-      ex.printStackTrace();
+      //ex.printStackTrace();
+      new logger.LogManager().logExc(ex);
     } finally {
       out    = null;
       kryo   = null;
@@ -341,6 +352,7 @@ public class UpdateProcessor extends HttpServlet  {
     PreparedQuery prepared = null;
     Kryo kryo              = null;
     Input input            = null;
+    Blob blob              = null;
     
     try {
       
@@ -353,7 +365,9 @@ public class UpdateProcessor extends HttpServlet  {
         
         kryo  = new Kryo();
         input = new Input();
-        input.setBuffer((byte[]) entities.get(0).getProperty("value"));
+        blob  = (Blob) entities.get(0).getProperty("value");
+        
+        input.setBuffer(blob.getBytes());
         
         kryo.register(String.class);
         kryo.register(String[].class);
@@ -367,16 +381,20 @@ public class UpdateProcessor extends HttpServlet  {
       } else {
         
         //
-        data = new DataHolder();
+        data        = new DataHolder();
+        data.caches = new ArrayList<Cache>();
+        data.hosts  = new ArrayList<Host>();
       }
     } catch (Exception ex) {
-      ex.printStackTrace();
+      //ex.printStackTrace();
+      new logger.LogManager().logExc(ex);
     } finally {
       query    = null;
       entities = null;
       prepared = null;
       kryo     = null;
       input    = null;
+      blob     = null;
     }
   }
   
