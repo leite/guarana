@@ -55,9 +55,10 @@ public class GnutellaUrlInfo {
     
     try {
       
-      System.out.println("call to ... " + url);
       
       _url = new URL(url + "?client="+ cacheVendor +"&version=" + URLEncoder.encode(cacheVendor + " " + cacheVersion) + "&getnetworks=1&cache=1&net=" + URLEncoder.encode(network) + "&ping=1&get=1&hostfile=1&urlfile=1");
+      
+      System.out.println("call to ... " + url + "?client="+ cacheVendor +"&version=" + URLEncoder.encode(cacheVendor + " " + cacheVersion) + "&getnetworks=1&cache=1&net=" + URLEncoder.encode(network) + "&ping=1&get=1&hostfile=1&urlfile=1");
       
       // request settings, allow truncated and no redirects please
       request = new HTTPRequest( _url , HTTPMethod.GET, Builder.allowTruncate().doNotFollowRedirects());
@@ -65,7 +66,7 @@ public class GnutellaUrlInfo {
       
       response = service.fetch(request);
       
-      if ( response.getResponseCode() != 200 ) { /* you can debug here */
+      if ( response.getResponseCode() != 200 ) {
         System.out.println(url);
         System.out.println(response.getResponseCode());
         System.out.println(new String(response.getContent(), "UTF-8").toLowerCase());
@@ -75,11 +76,6 @@ public class GnutellaUrlInfo {
       // convert bytes to string
       html = new String(response.getContent(), "UTF-8").toLowerCase();
       this.url = url;
-
-      //
-      System.out.println(" == == == ==");
-      System.out.println(html);
-      System.out.println(" == == == ==");
 
       // basic errors
       if( html.indexOf("ERROR")>-1 ){ return false; }
@@ -138,7 +134,6 @@ public class GnutellaUrlInfo {
       return true;
     } catch ( IOException ex ) {  
       
-      ex.printStackTrace();
       new logger.LogManager().logExc(ex);
       return false;
     } finally {

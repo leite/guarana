@@ -94,12 +94,6 @@ public class UpdateProcessor extends HttpServlet  {
         for (TaskHandle leasedTask : tasks) {
           
           slicedPayload = (new String(leasedTask.getPayload())).split("\\|");
-          //for(i=0; i<slicedPayload.length; ++i) {
-          //  System.out.println(i +") >> "+ slicedPayload[i]);
-          //}
-          
-          //System.out.println(slicedPayload[0].compareTo("host"));
-          //System.out.println(slicedPayload[0].compareTo("cache"));
           
           if(slicedPayload[0].compareTo("host") == 0) {
             
@@ -201,7 +195,6 @@ public class UpdateProcessor extends HttpServlet  {
 
       return;
     } catch ( Exception ex ) {
-      //ex.printStackTrace();
       new logger.LogManager().logExc(ex);
     } finally {
       
@@ -210,8 +203,6 @@ public class UpdateProcessor extends HttpServlet  {
       slicedPayload = null;
       tmpHost       = null;
       tmpCache      = null;
-      
-      System.gc();
     }
     
   }

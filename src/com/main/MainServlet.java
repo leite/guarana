@@ -11,10 +11,7 @@ package com.main;
 
 // Utils
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,17 +25,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 //Appengine low api
-import com.esotericsoftware.kryo.Kryo;
-import com.esotericsoftware.kryo.io.Input;
-import com.esotericsoftware.kryo.io.Output;
-import com.google.appengine.api.datastore.Blob;
-import com.google.appengine.api.datastore.DatastoreService;
-import com.google.appengine.api.datastore.DatastoreServiceFactory;
-import com.google.appengine.api.datastore.Entity;
-import com.google.appengine.api.datastore.FetchOptions;
-import com.google.appengine.api.datastore.PreparedQuery;
-import com.google.appengine.api.datastore.Query;
-import com.google.appengine.api.datastore.Query.SortDirection;
 import com.google.appengine.api.taskqueue.Queue;
 import com.google.appengine.api.taskqueue.QueueFactory;
 import com.google.appengine.api.taskqueue.TaskOptions;
@@ -61,99 +47,11 @@ public final class MainServlet extends HttpServlet {
   //private ServletContext context;
   
   public void init(ServletConfig config) throws ServletException {  
-    
     sets          = new Sets(getServletConfig());
     cache         = new MemCache();
     clientPattern = Pattern.compile("([^\\d?$?]*)(\\d?[^$]*)$");
     ipPattern     = Pattern.compile("[.?:]");
     super.init(config);
-  }
-  
-  private void loadLastCache() {
-    DatastoreService ds   = null;
-    Query q               = null;
-    Input input        = null;
-    Kryo kryo             = null;
-    try {
-      ds = DatastoreServiceFactory.getDatastoreService();
-      q = new Query("Coche");
-      q.addSort("timeStamp", SortDirection.DESCENDING);
-      PreparedQuery pq = ds.prepare(q);
-      List<Entity> entities = pq.asList(FetchOptions.Builder.withLimit(1));
-      // 
-      System.out.println(entities.size());
-      if(entities.size()>0) {
-        kryo  = new Kryo();
-        input = new Input(1024 * 1024);
-        Blob blob = (Blob) entities.get(0).getProperty("value");
-        input.setBuffer(blob.getBytes());
-        kryo.register(Cache.class);
-        kryo.register(List.class);
-        kryo.register(CacheList.class);
-        
-        CacheList cacheList = new CacheList();
-        Cache _cache = new Cache();
-        
-        cacheList = kryo.readObject(input, CacheList.class);
-        _cache = cacheList.caches.get(0);
-        System.out.println(_cache.cacheName);
-      }
-    } catch(Exception ex) {
-      ex.printStackTrace();
-    } finally {
-      ds    = null;
-      q     = null;
-      input = null;
-      kryo  = null;
-    }
-  }
-  
-  private void createCache() {
-
-    Output out        = null;
-    Kryo kryo        = null;
-    Entity cache        = null;
-    DatastoreService ds = null;
-    try {
-      ds = DatastoreServiceFactory.getDatastoreService();
-      cache = new Entity("Coche");
-      
-      CacheList cacheList = new CacheList();
-      Cache _cache = new Cache();
-      Cache _cache2 = new Cache();
-      _cache.cacheName = "Joe";
-      _cache.cacheVersion = "2.0";
-      _cache.g1 = true;
-      _cache.firstSeen = 0121212121L;
-      
-      _cache2.cacheName = "Maria";
-      _cache2.cacheVersion = "3.0";
-      _cache2.g1 = false;
-      _cache2.firstSeen = 121212121L;
-      
-      cacheList.caches = new ArrayList<Cache>();
-      cacheList.caches.add(_cache);
-      cacheList.caches.add(_cache2);
-      
-      kryo = new Kryo();
-      out  = new Output(1024, 1024*1024);
-      kryo.register(String.class);
-      kryo.register(Cache.class);
-      kryo.register(List.class);
-      kryo.register(CacheList.class);
-      kryo.writeObject(out, cacheList);
-      
-      cache.setProperty("timeStamp", System.currentTimeMillis()/1000);
-      cache.setProperty("value", new Blob(out.toBytes()));
-      ds.put(cache);
-    } catch (Exception ex) {
-      ex.printStackTrace();
-    } finally {
-      out   = null;
-      kryo  = null;
-      cache = null;
-      ds    = null;
-    }
   }
   
   // we only support get
@@ -232,6 +130,7 @@ public final class MainServlet extends HttpServlet {
                   update.append("i|update|WARNING|Bad host\n");
                 }else{
                   pushHostToQueue(validIp[0], validIp[1]);
+                  update.append("i|update|OK\ni|update|period|"+ sets.hostExpirationTime +"\n");
                 }
               }
             }
@@ -266,23 +165,20 @@ public final class MainServlet extends HttpServlet {
         // everything is fine
         rs.setStatus(200);
         
+        if(vars.get || vars.update){
+        	update.append("i|access|period|"+ sets.accessWait + "\n");
+        }
+        
         out.print(content.toString());
         out.print(getContentFromCache());
         out.print(update.toString());
-        
-        System.out.println(vars.update);
-        System.out.println(vars.get);
-        
-        if(vars.update==true || vars.get==true){
-        	out.print("i|access|period|"+ sets.accessWait + "\n");
-        }
         
         content.setLength(0);
         update.setLength(0);
         return;
       }
       
-    } catch (IOException ex) {
+    } catch (Exception ex) {
       new logger.LogManager().logExc(ex);
     } finally {
       vars    = null;
