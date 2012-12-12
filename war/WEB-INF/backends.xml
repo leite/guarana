@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<backends>
+ <backend name="worker">
+   <class>B1</class>
+   <instances>1</instances>
+   <options>
+     <fail-fast>true</fail-fast>
+     <dynamic>true</dynamic>
+     <public>false</public>
+   </options>
+ </backend>
+</backends>

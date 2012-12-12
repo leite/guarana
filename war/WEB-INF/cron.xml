@@ -2,8 +2,9 @@
 <cronentries>
   <cron>
     <url>/update/all</url>
-    <description>Repopulate the cache every 12 minutes</description>
-    <schedule>every 12 minutes</schedule>
+    <description>Repopulate the cache every 14 minutes</description>
+    <schedule>every 14 minutes</schedule>
+    <target>worker</target>
   </cron>
 </cronentries>
  

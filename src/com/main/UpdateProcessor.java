@@ -32,6 +32,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import com.google.appengine.api.LifecycleManager;
 import com.google.appengine.api.datastore.Blob;
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.DatastoreServiceFactory;
@@ -193,6 +194,7 @@ public class UpdateProcessor extends HttpServlet  {
         )
       );
 
+      LifecycleManager.getInstance().beginShutdown(30);
       return;
     } catch ( Exception ex ) {
       new logger.LogManager().logExc(ex);

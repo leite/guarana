@@ -28,16 +28,16 @@ public class GnutellaUrlInfo {
   private int rank;
 
   // getters
-  public int getUrlCount() { return urlCount; }
-  public int getIpCount() { return ipCount; }
-  public boolean isG1() { return g1; }
-  public boolean isG2() { return g2; }
-  public long getiAccess() { return iAccess; }
-  public String getCacheName() { return cacheName; }
+  public int getUrlCount()        { return urlCount; }
+  public int getIpCount()         { return ipCount; }
+  public boolean isG1()           { return g1; }
+  public boolean isG2()           { return g2; }
+  public long getiAccess()        { return iAccess; }
+  public String getCacheName()    { return cacheName; }
   public String getCacheVersion() { return cacheVersion; }
-  public int getRank() { return rank; }
-  public String getUrl() { return url; }
-  public String getNetwork() { return network; }
+  public int getRank()            { return rank; }
+  public String getUrl()          { return url; }
+  public String getNetwork()      { return network; }
   
   //
   @SuppressWarnings("deprecation")
@@ -101,7 +101,7 @@ public class GnutellaUrlInfo {
           // i|pong|DKAC/Enticing-Enumon 
           // i|pong|Guarana 0.2|gnutella2"
           Pattern identify = Pattern.compile("i\\|pong\\|([^\\s?\\|$?]*)\\s?([^\\|?$?]*)\\|?$?([^\\|?$?]*)\\|?$?", Pattern.DOTALL);
-          Matcher matched = identify.matcher(lines[i]);
+          Matcher matched  = identify.matcher(lines[i]);
           
           if(matched.find()) {
             cacheName    = matched.group(1);

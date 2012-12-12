@@ -126,7 +126,7 @@ public final class MainServlet extends HttpServlet {
               } else {
                 
                 //POSSIBLY RAZA 2.2.5.6 BUG!
-                if (vars.xLeaves>vars.xMax) {
+                if (vars.xLeaves > vars.xMax) {
                   update.append("i|update|WARNING|Bad host\n");
                 }else{
                   pushHostToQueue(validIp[0], validIp[1]);
