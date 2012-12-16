@@ -84,15 +84,15 @@ public class MemCache {
   
   public String get( String key ){
     
-    if( cache==null ) { return null; }
-    
+    if( cache==null )
+    	return null;
     return (String) cache.get(key); 
   }
   
   public byte[] getBinary( String key ){
     
-    if( cache==null ) { return null; }
-    
+    if( cache==null )  
+    	return null;
     return (byte[]) cache.get(key);
   }
   

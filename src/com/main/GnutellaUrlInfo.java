@@ -16,18 +16,19 @@ import com.google.appengine.api.urlfetch.FetchOptions.Builder;
 public class GnutellaUrlInfo {
   
   // private
-  private String url;
-  private String network;
-  private int urlCount;
-  private int ipCount;
-  private boolean g1;
-  private boolean g2;
-  private long iAccess;
-  private String cacheName;
-  private String cacheVersion;
-  private int rank;
+  public String url;
+  public String network;
+  public int urlCount;
+  public int ipCount;
+  public boolean g1;
+  public boolean g2;
+  public long iAccess;
+  public String cacheName;
+  public String cacheVersion;
+  public int rank;
 
   // getters
+  /*
   public int getUrlCount()        { return urlCount; }
   public int getIpCount()         { return ipCount; }
   public boolean isG1()           { return g1; }
@@ -38,6 +39,7 @@ public class GnutellaUrlInfo {
   public int getRank()            { return rank; }
   public String getUrl()          { return url; }
   public String getNetwork()      { return network; }
+  */
   
   //
   @SuppressWarnings("deprecation")

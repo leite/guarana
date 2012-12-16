@@ -13,14 +13,12 @@ package com.main;
 
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import javax.servlet.ServletConfig;
-import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -32,7 +30,6 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
-import com.google.appengine.api.LifecycleManager;
 import com.google.appengine.api.datastore.Blob;
 import com.google.appengine.api.datastore.DatastoreService;
 import com.google.appengine.api.datastore.DatastoreServiceFactory;
@@ -90,7 +87,7 @@ public class UpdateProcessor extends HttpServlet  {
       
       loadData();
       
-      while(!((tasks = queue.leaseTasks(30, TimeUnit.SECONDS, 5)).isEmpty())){
+      while(!((tasks = queue.leaseTasks(30, TimeUnit.SECONDS, 30)).isEmpty())){
         
         for (TaskHandle leasedTask : tasks) {
           
@@ -125,6 +122,8 @@ public class UpdateProcessor extends HttpServlet  {
               tmpHost.totalLeaves   = Long.parseLong(slicedPayload[7]);
               tmpHost.maxLeaves     = Long.parseLong(slicedPayload[8]);
               data.hosts.add(tmpHost);
+              data.hostsIndex = (Long[]) arrayAlloc(data.hostsIndex, hostsSize + 1);
+              data.hostsIndex[hostsSize] = hostIp;
               ++newHosts;
             }
           } else {
@@ -164,6 +163,8 @@ public class UpdateProcessor extends HttpServlet  {
               tmpCache.g1            = Boolean.parseBoolean(slicedPayload[10]);
               tmpCache.g2            = Boolean.parseBoolean(slicedPayload[11]);
               data.caches.add(tmpCache);
+              data.cachesIndex = (String[]) arrayAlloc(data.cachesIndex, cachesSize + 1);
+              data.cachesIndex[cachesSize] = slicedPayload[1];
               ++newCaches;
             }
           }
@@ -194,10 +195,10 @@ public class UpdateProcessor extends HttpServlet  {
         )
       );
 
-      LifecycleManager.getInstance().beginShutdown(30);
       return;
     } catch ( Exception ex ) {
-      new logger.LogManager().logExc(ex);
+    	ex.printStackTrace(System.err);
+      //new logger.LogManager().logExc(ex);
     } finally {
       
       queue         = null;
@@ -215,8 +216,8 @@ public class UpdateProcessor extends HttpServlet  {
     Set<String> cacheKeys = new HashSet<String>();
     StringBuilder content = new StringBuilder();
     String[] cachesIndex  = new String[data.caches.size()];
-  Long[] hostsIndex     = new Long[data.hosts.size()];
-  String cacheKey       = null; 
+    Long[] hostsIndex     = new Long[data.hosts.size()];
+    String cacheKey       = null; 
     
     int i, x = 0, z, totalCaches, totalHosts, totalLoop;
     boolean isLeaves = false, isVendors = false, isUptime = false, isIp = false, isCache = false, isIndexed = false;
@@ -292,7 +293,7 @@ public class UpdateProcessor extends HttpServlet  {
       }
       
       if(z == (totalHosts + totalCaches - 1)) {
-      cache.set(cacheKey, content.toString(), 3600);
+        cache.set(cacheKey, content.length()==0 ? null : content.toString(), 3600);
         content.setLength(0);
         ++x;
       }
@@ -409,6 +410,7 @@ public class UpdateProcessor extends HttpServlet  {
   }
   
   //
+  @SuppressWarnings("rawtypes")
   private static Object arrayAlloc(Object oldArray, int newSize) {
     int oldSize = java.lang.reflect.Array.getLength(oldArray);
     Class elementType = oldArray.getClass().getComponentType();

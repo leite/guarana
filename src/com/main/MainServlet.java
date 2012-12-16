@@ -11,7 +11,9 @@ package com.main;
 
 // Utils
 import java.io.IOException;
+import java.util.Date;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,7 +40,7 @@ import appengine.MemCache;
 public final class MainServlet extends HttpServlet {
   
   private static Sets sets;
-  private Vars vars;
+  //private Vars vars;
   private MemCache cache;
   private HttpServletResponse resp;
   private Pattern clientPattern;
@@ -58,104 +60,168 @@ public final class MainServlet extends HttpServlet {
   @SuppressWarnings("unchecked")
   public final void doGet(HttpServletRequest rq, HttpServletResponse rs) {
     
-    vars = new Vars(rq.getParameterMap());
-    resp = rs;
+    Map<String,String[]> params = rq.getParameterMap();
     
-    StringBuilder content = null, update = null;
+    boolean isPing   = params.containsKey("ping"); 
+    boolean isUpdate = params.containsKey("update"); 
+    boolean isGet    = params.containsKey("get") || params.containsKey("bfile");  
+    boolean isCaches = params.containsKey("gwcs") || params.containsKey("urlfile"); 
+    boolean isHosts  = params.containsKey("showhosts") || params.containsKey("hostfile");  
+
+    resp                    = rs;
+    long timeStamp          = Math.round((new Date()).getTime() / 1000);
+    StringBuilder content   = null;
+    Queue queue             = null;
     ServletOutputStream out = null;
     
     try {
       
       content = new StringBuilder();
-      update  = new StringBuilder();
       out     = rs.getOutputStream();
       
       rs.setContentType("text/plain");
       rs.setCharacterEncoding("UTF-8");
       
-      // DEBUG purposes
-      if( sets.debug && ( vars.dump || vars.truncate ) ) {
-        
-        // dump memory
-        if( vars.dump )
-        
-        // truncate memory
-        if( vars.truncate )
-        
-        //
-        out.println("debug / truncated / dump report\n");
-      }
-      
       //get, ping, update request 
-      if ( vars.bFile || vars.get || vars.update || vars.ping ) {
+      if (isGet || isUpdate || isPing) {
         
         // check if has network and valid it
-        if( vars.net == null ) {
-          sendError("No Network"); return;
+        if(!params.containsKey("net")) {
+          sendError("No Network"); 
+          return;
         } else {
-          if( !validateNet(vars.net) ) { sendError("Unsupported network"); return; }
+          if(!validateNet(params.get("net")[0])) { 
+            sendError("Unsupported network"); 
+            return; 
+          }
         }
       
         // check if has client
-        if( vars.client == null ) { sendError("No Client"); return; }  
+        if(!params.containsKey("client")) { 
+          sendError("No Client"); 
+          return; 
+        }  
+        
+        String client  = "";
+        String version = "";
         
         // check (old gnutella2 clients send clientName clientVersion together)
-        checkClientAndVersion();
+        Matcher clientMatch = clientPattern.matcher(params.get("client")[0]);
+        // assert search
+        if(clientMatch.find()) {
+          if(clientMatch.groupCount()==2) {
+            // version match
+            if(clientMatch.group(2).isEmpty() && params.containsKey("version")) {
+              Matcher versionMatch = clientPattern.matcher(params.get("version")[0]);
+              // assert search
+              if(!versionMatch.find()) {
+                if(versionMatch.groupCount()!=2) {
+                  if(clientMatch.group(1).equals("TEST") && !versionMatch.group(1).isEmpty()) {
+                    client  = clientMatch.group(1) + versionMatch.group(1);
+                    version = versionMatch.group(2);
+                  } else {
+                    client  = clientMatch.group(1);
+                    version = versionMatch.group(2);
+                  }
+                  //versionMatch = null;
+                } else {
+                  client  = clientMatch.group(1);
+                  version = clientMatch.group(2);
+                }
+                //clientMatch = null;
+              }
+            }
+          }
+        }
         
-        if( vars.ping )
-          content.append( vars.getNetworks ? doPong(true) + listNets(): doPong(false) );
+        if(isPing)
+          content.append(params.containsKey("getnetworks") ? doPong(true) + listNets() : doPong(false));
         else
-          if( vars.getNetworks ) content.append( listNets() ); 
+          if(params.containsKey("getnetworks")) 
+            content.append(listNets()); 
         
-        if( vars.update ) {
-          
-          if( vars.ip != null ) {
+        String cacheContent;
+
+        if (isGet || (isHosts && isCaches)) {
+          cacheContent = cache.get("url_ip" + (params.containsKey("getleaves") ? "_leaves" : "") + (params.containsKey("getvendors") ? "_vendors" : "") + (params.containsKey("getuptime") ? "_uptime" : ""));
+          content.append(cacheContent==null ? "i|no-url-no-hosts\n" : cacheContent);
+        } else if (isCaches) {
+          cacheContent = cache.get("url");
+          content.append(cacheContent==null ? "i|no-url\n" : cacheContent);
+        } else if (isHosts) {
+          cacheContent = cache.get("ip" +  (params.containsKey("getleaves") ? "_leaves" : "") + (params.containsKey("getvendors") ? "_vendors" : "") + (params.containsKey("getuptime") ? "_uptime" : ""));
+          content.append(cacheContent==null ? "i|no-hosts\n" : cacheContent);
+        }
+
+        if(isUpdate) {
+        	
+          if(params.containsKey("ip")) {
             
             //if ( rq.getRemoteAddr() != vars.ip.substring( 0, vars.ip.indexOf(":") ) && !sets.debug ) {
             //  sendError( "Query IP doesn't match client IP" ); return;
             //}
             
-            Long[] validIp;
+            long[] validIp;
               
-            if ((validIp = validateIp(vars.ip)) == null) {
-              update.append( "i|update|WARNING|Invalid Ip\n" );
+            if ((validIp = validateIp(params.get("ip")[0])) == null) {
+              content.append("i|update|WARNING|Invalid Ip\n");
             }else{
               
               if (isTooEarly(validIp[0])) {
-                update.append("i|update|WARNING|Returned too soon\n");
+                content.append("i|update|WARNING|Returned too soon\n");
               } else {
                 
+            	  long xLeaves = params.containsKey("x_leaves") ? Long.parseLong(params.get("x_leaves")[0]) : (params.containsKey("x.leaves") ? Long.parseLong(params.get("x.leaves")[0]) : 0);
+            	  long xMax    = params.containsKey("x_max")    ? Long.parseLong(params.get("x_max")[0])    : (params.containsKey("x.max")    ? Long.parseLong(params.get("x.max")[0])    : 0);
+                long uptime  = params.containsKey("uptime")   ? Long.parseLong(params.get("uptime")[0])   : 0;
+            	  
                 //POSSIBLY RAZA 2.2.5.6 BUG!
-                if (vars.xLeaves > vars.xMax) {
-                  update.append("i|update|WARNING|Bad host\n");
+                if (xLeaves > xMax) {
+                  content.append("i|update|WARNING|Bad host\n");
                 }else{
-                  pushHostToQueue(validIp[0], validIp[1]);
-                  update.append("i|update|OK\ni|update|period|"+ sets.hostExpirationTime +"\n");
+
+                  // push host to queue
+                  // host|timeStamp|ip|port|clientNick|clientVersion|hostUptime|totalLeaves|maxLeaves
+                  // host|191919191|129090909|6346|RAZA|2.5.8.0|121999292|200|300
+                  queue = QueueFactory.getQueue("update");
+                  queue.add(TaskOptions.Builder.withMethod(Method.PULL).payload(
+                    String.format(
+                      "host|%d|%d|%d|%s|%s|%d|%d|%d", timeStamp, validIp[0], validIp[1], client, version, uptime, xLeaves, xMax
+                    )
+                  ));              
+                  content.append("i|update|OK\ni|update|period|"+ sets.hostExpirationTime +"\n");
                 }
               }
             }
             
           }
           
-          if (vars.url != null) {
+          if (params.containsKey("url")) {
             
             String validUrl;
             
-            if ((validUrl = validateUrl(vars.url)).isEmpty()) {
-              update.append("i|update|WARNING|\n");
+            if ((validUrl = validateUrl(params.get("url")[0])).isEmpty()) {
+              content.append("i|update|WARNING|\n");
             } else {
               
               GnutellaUrlInfo info = new GnutellaUrlInfo();
               
-              if(info.getUrl(validUrl, vars.net, sets.cacheVendor, sets.cacheVersion)) {
+              if(info.getUrl(validUrl, params.get("net")[0], sets.cacheVendor, sets.cacheVersion)) {
                 
-                // push information to update queue
-                pushUrlToQueue(info);
-                update.append("i|update|OK\ni|update|period|"+ sets.urlExpirationTime +"\n");
+                // push cache to queue
+                // url|url (address)|cacheName|cacheVersion|clientNick|clientVersion|rank|timeStamp|urlCount|ipCount|g1|g2
+                // url|http://cache.leite.us/|GUAR|0.3|RAZA|2.5.5.3|10|123232323|40|80|false|true
+                queue = (queue==null) ? QueueFactory.getQueue("update") : queue;
+                queue.add(TaskOptions.Builder.withMethod(Method.PULL).payload(
+                  String.format(
+                    "url|%s|%s|%s|%s|%s|%d|%d|%d|%d|%s|%s", info.url, info.cacheName, info.cacheVersion, client, version, info.rank, timeStamp, info.urlCount, info.ipCount, info.g1, info.g2
+                  )
+                ));
+                content.append("i|update|OK\ni|update|period|"+ sets.urlExpirationTime +"\n");
               } else {
                 
                 // oh man, thats bad
-                update.append("i|update|WARNING|Bad Cache\n");
+                content.append("i|update|WARNING|Bad Cache\n");
               }
             }
           }
@@ -165,26 +231,22 @@ public final class MainServlet extends HttpServlet {
         // everything is fine
         rs.setStatus(200);
         
-        if(vars.get || vars.update){
-        	update.append("i|access|period|"+ sets.accessWait + "\n");
+        if(isGet || (isHosts && isCaches) || isUpdate) {
+          content.append("i|access|period|"+ sets.accessWait + "\n");
         }
         
         out.print(content.toString());
-        out.print(getContentFromCache());
-        out.print(update.toString());
-        
         content.setLength(0);
-        update.setLength(0);
         return;
       }
       
     } catch (Exception ex) {
-      new logger.LogManager().logExc(ex);
+      ex.printStackTrace(System.err);
     } finally {
-      vars    = null;
       content = null;
-      update  = null;
       out     = null;
+      queue   = null;
+      params  = null;
     }
   }
   
@@ -199,7 +261,7 @@ public final class MainServlet extends HttpServlet {
   }  
   
   // validate ip range and port
-  private final Long[] validateIp(String host) {
+  private final long[] validateIp(String host) {
     try {
     
       if(host == null || host == "")
@@ -229,7 +291,7 @@ public final class MainServlet extends HttpServlet {
       ip > 3405803776L && 3405804031L > ip || ip > 3758096384L && 4026531839L > ip || ip > 4026531840L && 4294967295L > ip)
         return null;
       
-      Long[] valid = { ip, e };
+      long[] valid = { ip, e };
       
       return valid;
           
@@ -252,78 +314,10 @@ public final class MainServlet extends HttpServlet {
         return ""; 
     } 
     
-    return url.toLowerCase().replaceAll("\\/(default|index)\\.(aspx|php|cgi|cfm|asp|pl|lp|jsp|js)", "");
-  }
-  
-  // get content from memcache
-  private final String getContentFromCache() {
-    
-    String cacheContent = null;
-    if (vars.bFile || vars.get || (vars.hostFile && vars.urlFile)) { // - leaves - vendors - uptime
-      cacheContent = cache.get("url_ip" + (vars.getLeaves ? "_leaves":"") + (vars.getVendors ? "_vendors" : "") + (vars.getUptime ? "_uptime" : "")); 
-    } else if (vars.urlFile || vars.gwcs) {
-      cacheContent = cache.get("url");
-    } else if (vars.hostFile || vars.showHosts) {
-      cacheContent = cache.get("ip" + (vars.getLeaves ? "_leaves":"") + (vars.getVendors ? "_vendors" : "") + (vars.getUptime ? "_uptime" : ""));
-    }
-    return cacheContent==null ? "" : cacheContent;
-  }
-  
-  // push host to update queue
-  private void pushUrlToQueue(GnutellaUrlInfo info) {
-    
-    StringBuilder payload = new StringBuilder();
-    Queue queue           = QueueFactory.getQueue("update");
-    
-    // url|url (address)|cacheName|cacheVersion|clientNick|clientVersion|rank|timeStamp|urlCount|ipCount|g1|g2
-    //
-    // url|http://cache.leite.us/|GUAR|0.3|RAZA|2.5.5.3|10|123232323|40|80|false|true
-    
-    payload.append("url");                              payload.append("|");
-    payload.append(info.getUrl());                      payload.append("|");
-    payload.append(info.getCacheName());                payload.append("|");
-    payload.append(info.getCacheVersion());             payload.append("|");
-    payload.append(vars.client);                        payload.append("|");
-    payload.append(vars.version);                       payload.append("|");
-    payload.append(info.getRank());                     payload.append("|");
-    payload.append(vars.timeStamp);                     payload.append("|");
-    payload.append(info.getUrlCount());                 payload.append("|");
-    payload.append(info.getIpCount());                  payload.append("|");
-    payload.append((info.isG1() ? "true" : "false"));   payload.append("|");
-    payload.append((info.isG2() ? "true" : "false"));   
-    
-    queue.add(TaskOptions.Builder.withMethod(Method.PULL).payload(payload.toString()));
-    
-    payload.setLength(0);
-    payload = null;
-    queue   = null;
-  }
-  
-  // push host to update queue
-  private void pushHostToQueue(long ip, long port) {
-    
-    StringBuilder payload = new StringBuilder();
-    Queue queue           = QueueFactory.getQueue("update");
-    
-    // host|timeStamp|ip|port|clientNick|clientVersion|hostUptime|totalLeaves|maxLeaves
-    //
-    // host|191919191|129090909|6346|RAZA|2.5.8.0|121999292|200|300
-    
-    payload.append("host");         payload.append("|");
-    payload.append(vars.timeStamp); payload.append("|");
-    payload.append(ip);             payload.append("|");
-    payload.append(port);           payload.append("|");
-    payload.append(vars.client);    payload.append("|");
-    payload.append(vars.version);   payload.append("|");
-    payload.append(vars.uptime);    payload.append("|");
-    payload.append(vars.xLeaves);   payload.append("|");
-    payload.append(vars.xMax); 
-    
-    queue.add(TaskOptions.Builder.withMethod(Method.PULL).payload(payload.toString()));
-    
-    payload.setLength(0);
-    payload = null;
-    queue   = null;
+    return url
+      .toLowerCase()
+      .replaceAll("\\/(default|index)\\.(aspx|php|cgi|cfm|asp|pl|lp|jsp|js)\\/?$", "")
+      .replaceAll("\\.(aspx|php|cgi|cfm|asp|pl|lp|jsp|js)\\/?$", ".$2");
   }
   
   // access control to avoid ddos
@@ -343,7 +337,7 @@ public final class MainServlet extends HttpServlet {
       this.resp.setStatus(200);
       this.resp.getOutputStream().print(message);
     } catch (IOException ex) {
-      System.err.println(ex.getMessage());
+      ex.printStackTrace(System.err);
     }
   }
     
@@ -360,6 +354,7 @@ public final class MainServlet extends HttpServlet {
   }
   
   //
+  /*
   private final void checkClientAndVersion() {
     // client match
     Matcher clientMatch = clientPattern.matcher(vars.client);
@@ -386,6 +381,7 @@ public final class MainServlet extends HttpServlet {
     }
     clientMatch = null;
   }
+  */
   
   private final static String join(Set<String> s, String delimiter) {
     if (s == null || s.isEmpty()) return "";
