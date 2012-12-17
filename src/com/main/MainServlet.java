@@ -114,8 +114,8 @@ public final class MainServlet extends HttpServlet {
             if(clientMatch.group(2).isEmpty() && params.containsKey("version")) {
               Matcher versionMatch = clientPattern.matcher(params.get("version")[0]);
               // assert search
-              if(!versionMatch.find()) {
-                if(versionMatch.groupCount()!=2) {
+              if(versionMatch.find()) {
+                if(versionMatch.groupCount()==2) {
                   if(clientMatch.group(1).equals("TEST") && !versionMatch.group(1).isEmpty()) {
                     client  = clientMatch.group(1) + versionMatch.group(1);
                     version = versionMatch.group(2);
@@ -123,14 +123,14 @@ public final class MainServlet extends HttpServlet {
                     client  = clientMatch.group(1);
                     version = versionMatch.group(2);
                   }
-                  //versionMatch = null;
-                } else {
-                  client  = clientMatch.group(1);
-                  version = clientMatch.group(2);
                 }
-                //clientMatch = null;
               }
+              //versionMatch = null;
+            } else {
+              client  = clientMatch.group(1);
+              version = clientMatch.group(2);
             }
+            //clientMatch = null;
           }
         }
         
@@ -154,7 +154,7 @@ public final class MainServlet extends HttpServlet {
         }
 
         if(isUpdate) {
-        	
+          
           if(params.containsKey("ip")) {
             
             //if ( rq.getRemoteAddr() != vars.ip.substring( 0, vars.ip.indexOf(":") ) && !sets.debug ) {
@@ -171,10 +171,10 @@ public final class MainServlet extends HttpServlet {
                 content.append("i|update|WARNING|Returned too soon\n");
               } else {
                 
-            	  long xLeaves = params.containsKey("x_leaves") ? Long.parseLong(params.get("x_leaves")[0]) : (params.containsKey("x.leaves") ? Long.parseLong(params.get("x.leaves")[0]) : 0);
-            	  long xMax    = params.containsKey("x_max")    ? Long.parseLong(params.get("x_max")[0])    : (params.containsKey("x.max")    ? Long.parseLong(params.get("x.max")[0])    : 0);
+                long xLeaves = params.containsKey("x_leaves") ? Long.parseLong(params.get("x_leaves")[0]) : (params.containsKey("x.leaves") ? Long.parseLong(params.get("x.leaves")[0]) : 0);
+                long xMax    = params.containsKey("x_max")    ? Long.parseLong(params.get("x_max")[0])    : (params.containsKey("x.max")    ? Long.parseLong(params.get("x.max")[0])    : 0);
                 long uptime  = params.containsKey("uptime")   ? Long.parseLong(params.get("uptime")[0])   : 0;
-            	  
+                
                 //POSSIBLY RAZA 2.2.5.6 BUG!
                 if (xLeaves > xMax) {
                   content.append("i|update|WARNING|Bad host\n");
