@@ -317,7 +317,7 @@ public final class MainServlet extends HttpServlet {
     return url
       .toLowerCase()
       .replaceAll("\\/(default|index)\\.(aspx|php|cgi|cfm|asp|pl|lp|jsp|js)\\/?$", "")
-      .replaceAll("\\.(aspx|php|cgi|cfm|asp|pl|lp|jsp|js)\\/?$", ".$2");
+      .replaceAll("\\.(aspx|php|cgi|cfm|asp|pl|lp|jsp|js)\\/?$", ".$1");
   }
   
   // access control to avoid ddos
