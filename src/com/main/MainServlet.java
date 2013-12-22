@@ -353,36 +353,6 @@ public final class MainServlet extends HttpServlet {
     return false;
   }
   
-  //
-  /*
-  private final void checkClientAndVersion() {
-    // client match
-    Matcher clientMatch = clientPattern.matcher(vars.client);
-    // assert search
-    if(!clientMatch.find())         { return; }
-    if(clientMatch.groupCount()!=2) { return; }
-    // version match
-    if(clientMatch.group(2).isEmpty() && vars.version!=null) {
-      Matcher versionMatch = clientPattern.matcher(vars.version);
-      // assert search
-      if(!versionMatch.find())         { return; }
-      if(versionMatch.groupCount()!=2) { return; }
-      if(clientMatch.group(1).equals("TEST") && !versionMatch.group(1).isEmpty()){
-        vars.client  = clientMatch.group(1) + versionMatch.group(1);
-        vars.version = versionMatch.group(2);
-      } else {
-        vars.client  = clientMatch.group(1);
-        vars.version = versionMatch.group(2);
-      }
-      versionMatch = null;
-    } else {
-      vars.client  = clientMatch.group(1);
-      vars.version = clientMatch.group(2);
-    }
-    clientMatch = null;
-  }
-  */
-  
   private final static String join(Set<String> s, String delimiter) {
     if (s == null || s.isEmpty()) return "";
     Iterator<String> iter = s.iterator();
